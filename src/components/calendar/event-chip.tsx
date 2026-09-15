@@ -21,6 +21,25 @@ export function CategoryIcon({ icon, className = "" }: { icon: string; className
   );
 }
 
+/** Google カレンダーから読み取り専用で取り込んだ予定であることを示す印。 */
+export function GoogleSourceIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 9a8 8 0 0 1 14-4.9M20 15a8 8 0 0 1-14 4.9" />
+      <path d="M18 4v4.5H13.5M6 20v-4.5H10.5" />
+    </svg>
+  );
+}
+
 /**
  * 月表示・リスト表示で使う予定のひとかたまり。
  * 左端の帯と背景がスタッフ（または分類）の色になる。
@@ -42,8 +61,11 @@ export function EventChip({
   onPointerDown?: (down: React.PointerEvent<HTMLElement>) => void;
   compact?: boolean;
 }) {
+  const isGoogle = event.source === "google";
   const time = event.allDay ? "終日" : formatTime(toJst(event.startsAt));
-  const label = [time, staffName, event.title].filter(Boolean).join(" ");
+  const label = [time, staffName, event.title, isGoogle ? "（Googleカレンダー・読み取り専用）" : null]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <button
@@ -53,14 +75,19 @@ export function EventChip({
         clickEvent.stopPropagation();
         onOpen(event);
       }}
-      style={onPointerDown ? { touchAction: "none" } : undefined}
+      style={{
+        ...(onPointerDown ? { touchAction: "none" } : undefined),
+        ...(isGoogle ? { borderLeftStyle: "dashed" } : undefined),
+      }}
       aria-label={label}
       title={label}
       className={`a-${accent} chip flex w-full items-center gap-1.5 overflow-hidden rounded-md text-left ${
         compact ? "px-1.5 py-[3px] text-[11px]" : "px-2 py-1 text-xs"
-      }`}
+      } ${isGoogle ? "opacity-90" : ""}`}
     >
-      {category ? (
+      {isGoogle ? (
+        <GoogleSourceIcon className="h-3 w-3 shrink-0 opacity-80" />
+      ) : category ? (
         <CategoryIcon icon={category.icon} className="h-3 w-3 shrink-0 opacity-80" />
       ) : null}
       <span className="tabular shrink-0 font-semibold opacity-80">{time}</span>

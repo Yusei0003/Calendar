@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 import { Avatar } from "@/components/avatar";
 import { CategoryIcon } from "@/components/calendar/event-chip";
 import { Toast, type ToastMessage } from "@/components/calendar/toast";
+import { GoogleCalendarSection } from "@/components/settings/google-calendar-section";
 import { ColorPicker, IconPicker, OrderButtons, Switch } from "@/components/settings/pickers";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -51,9 +52,11 @@ const nameInputStyle = {
 export function SettingsApp({
   initialStaff,
   initialCategories,
+  actor,
 }: {
   initialStaff: Staff[];
   initialCategories: Category[];
+  actor: Staff;
 }) {
   const [staff, setStaff] = useState(initialStaff);
   const [categories, setCategories] = useState(initialCategories);
@@ -223,6 +226,8 @@ export function SettingsApp({
       </header>
 
       <main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-4">
+        <GoogleCalendarSection actorName={actor.name} />
+
         <Section
           title="スタッフ"
           description="名前と色を決めます。色はカレンダー上でその人の予定に使われます。退職した人は「在籍」を切ると新しい予定で選べなくなりますが、過去の予定はそのまま残ります。"

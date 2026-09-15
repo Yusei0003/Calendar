@@ -1,7 +1,7 @@
 "use client";
 
 import { Avatar } from "@/components/avatar";
-import { CategoryIcon } from "@/components/calendar/event-chip";
+import { CategoryIcon, GoogleSourceIcon } from "@/components/calendar/event-chip";
 import { byId, eventAccent } from "@/lib/display";
 import {
   WEEKDAY_LABELS,
@@ -108,18 +108,28 @@ export function ListView({
                 const accent = eventAccent(event, staffById, categoryById);
                 const category = categoryById.get(event.categoryId);
                 const member = event.staffId ? staffById.get(event.staffId) : undefined;
+                const isGoogle = event.source === "google";
 
                 return (
                   <li key={event.id}>
                     <button
                       type="button"
                       onClick={() => onOpenEvent(event)}
-                      className={`a-${accent} flex w-full items-center gap-3 border-b px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-[var(--surface-2)]`}
+                      title={isGoogle ? "Googleカレンダー・読み取り専用" : undefined}
+                      className={`a-${accent} flex w-full items-center gap-3 border-b px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-[var(--surface-2)] ${isGoogle ? "opacity-90" : ""}`}
                     >
                       <span
                         aria-hidden="true"
                         className="h-9 w-1 shrink-0 rounded-full"
-                        style={{ background: "var(--accent)" }}
+                        style={{
+                          background: "var(--accent)",
+                          ...(isGoogle
+                            ? {
+                                background: "transparent",
+                                border: "1.5px dashed var(--accent)",
+                              }
+                            : undefined),
+                        }}
                       />
 
                       <span className="tabular w-[4.5rem] shrink-0 text-xs font-semibold text-ink-muted">
@@ -138,7 +148,12 @@ export function ListView({
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">{event.title}</span>
                         <span className="mt-0.5 flex items-center gap-2 text-[11px] text-ink-faint">
-                          {category ? (
+                          {isGoogle ? (
+                            <span className="flex items-center gap-1">
+                              <GoogleSourceIcon className="h-3 w-3" />
+                              Googleカレンダー
+                            </span>
+                          ) : category ? (
                             <span className="flex items-center gap-1">
                               <CategoryIcon icon={category.icon} className="h-3 w-3" />
                               {category.name}

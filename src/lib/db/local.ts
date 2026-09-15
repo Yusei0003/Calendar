@@ -22,6 +22,8 @@ interface Snapshot {
   staff: Staff[];
   categories: Category[];
   events: CalendarEvent[];
+  /** 本人の Google カレンダー連携。スタッフID → 秘密のiCal URL。 */
+  googleLinks: Record<string, string>;
 }
 
 const FILE = process.env.LOCAL_DB_PATH ?? join(process.cwd(), ".data", "db.json");
@@ -31,6 +33,7 @@ function emptySnapshot(): Snapshot {
     staff: SEED_STAFF.map((s) => ({ ...s })),
     categories: SEED_CATEGORIES.map((c) => ({ ...c })),
     events: [],
+    googleLinks: {},
   };
 }
 
@@ -51,6 +54,7 @@ async function load(): Promise<Snapshot> {
       staff: parsed.staff ?? [],
       categories: parsed.categories ?? [],
       events: parsed.events ?? [],
+      googleLinks: parsed.googleLinks ?? {},
     };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -208,5 +212,22 @@ export const localStore: Store = {
       found.updatedAt = new Date().toISOString();
       return found;
     });
+  },
+
+  async getGoogleIcalUrl(staffId) {
+    return read((db) => db.googleLinks[staffId] ?? null);
+  },
+
+  async setGoogleIcalUrl(staffId, url) {
+    await mutate((db) => {
+      if (url) db.googleLinks[staffId] = url;
+      else delete db.googleLinks[staffId];
+    });
+  },
+
+  async listGoogleIcalLinks() {
+    return read((db) =>
+      Object.entries(db.googleLinks).map(([staffId, url]) => ({ staffId, url })),
+    );
   },
 };

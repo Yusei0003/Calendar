@@ -58,6 +58,9 @@ describe("SQL と TypeScript の列名の突き合わせ", () => {
       for (const column of columns) {
         // created_at はスタッフ・分類では画面に出さないので持たない
         if (column === "created_at" && table !== "events") continue;
+        // google_ical_url は秘密情報のため StaffRow（一覧APIが返す形）には
+        // 意図的に含めない。専用メソッドで個別に select している。
+        if (column === "google_ical_url") continue;
         assert.ok(fields.has(column), `${table}.${column} が ${interfaceName} にありません`);
       }
     });
@@ -83,6 +86,16 @@ describe("SQL と TypeScript の列名の突き合わせ", () => {
     for (const [, name] of source.matchAll(/\.(?:eq|is|gte|lt|order)\("([a-z_]+)"/g)) {
       assert.ok(all.has(name), `絞り込みに使う列 ${name} が SQL にありません`);
     }
+  });
+
+  it("スタッフ一覧に返す形（toStaff）が秘密の Google URL を含んでいない", () => {
+    const start = source.indexOf("function toStaff(");
+    assert.notEqual(start, -1, "toStaff が見つかりません");
+    const body = source.slice(start, source.indexOf("\n}", start));
+    assert.ok(
+      !body.includes("google_ical_url") && !body.includes("googleIcalUrl"),
+      "toStaff がスタッフ一覧に google_ical_url を含めてしまっています（他人に漏れます）",
+    );
   });
 
   it("初期データのスタッフが仕様どおり5名そろっている", () => {

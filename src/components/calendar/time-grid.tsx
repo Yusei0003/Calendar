@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { CategoryIcon } from "@/components/calendar/event-chip";
+import { CategoryIcon, GoogleSourceIcon } from "@/components/calendar/event-chip";
 import { startGesture } from "@/lib/client/drag-gesture";
 import { byId, eventAccent } from "@/lib/display";
 import {
@@ -151,6 +151,8 @@ export function TimeGrid({
     column: GridColumn,
     kind: DragKind,
   ) => {
+    // Google カレンダーから取り込んだ予定は読み取り専用。動かせない。
+    if (slot.event.source === "google") return;
     if (down.button !== 0 && down.pointerType === "mouse") return;
     down.stopPropagation();
 
@@ -220,14 +222,17 @@ export function TimeGrid({
             <div key={column.key} className="min-w-0 flex-1 space-y-1 border-l p-1">
               {allDayEvents(column.events, column.day).map((event) => {
                 const accent = eventAccent(event, staffById, categoryById);
+                const isGoogle = event.source === "google";
                 return (
                   <button
                     key={event.id}
                     type="button"
                     onClick={() => onOpenEvent(event)}
-                    title={event.title}
-                    className={`a-${accent} chip flex w-full items-center gap-1 rounded-md px-1.5 py-1 text-left text-[11px]`}
+                    title={`${event.title}${isGoogle ? "（Googleカレンダー・読み取り専用）" : ""}`}
+                    className={`a-${accent} chip flex w-full items-center gap-1 rounded-md px-1.5 py-1 text-left text-[11px] ${isGoogle ? "opacity-90" : ""}`}
+                    style={isGoogle ? { borderLeftStyle: "dashed" } : undefined}
                   >
+                    {isGoogle ? <GoogleSourceIcon className="h-3 w-3 shrink-0 opacity-80" /> : null}
                     <span className="truncate font-medium">{event.title}</span>
                   </button>
                 );
@@ -293,6 +298,7 @@ export function TimeGrid({
                 {slots.map((slot) => {
                   const accent = eventAccent(slot.event, staffById, categoryById);
                   const category = categoryById.get(slot.event.categoryId);
+                  const isGoogle = slot.event.source === "google";
                   const width = 100 / slot.lanes;
                   const height = ((slot.endMin - slot.startMin) / 60) * HOUR_PX - 2;
                   const short = slot.endMin - slot.startMin < 45;
@@ -312,18 +318,28 @@ export function TimeGrid({
                     >
                       <button
                         type="button"
-                        onPointerDown={(down) => beginDrag(down, slot, column, "move")}
+                        onPointerDown={isGoogle ? undefined : (down) => beginDrag(down, slot, column, "move")}
                         onClick={() => openUnlessDragging(slot.event)}
-                        title={`${formatTime(toJst(slot.event.startsAt))} ${slot.event.title}`}
-                        className={`a-${accent} chip flex h-full w-full cursor-grab flex-col items-start justify-start overflow-hidden rounded-md px-1.5 py-1 text-left active:cursor-grabbing`}
-                        style={{ touchAction: "none", opacity: dragging ? 0.85 : 1 }}
+                        title={`${formatTime(toJst(slot.event.startsAt))} ${slot.event.title}${
+                          isGoogle ? "（Googleカレンダー・読み取り専用）" : ""
+                        }`}
+                        className={`a-${accent} chip flex h-full w-full flex-col items-start justify-start overflow-hidden rounded-md px-1.5 py-1 text-left ${
+                          isGoogle ? "cursor-pointer opacity-90" : "cursor-grab active:cursor-grabbing"
+                        }`}
+                        style={{
+                          touchAction: isGoogle ? undefined : "none",
+                          opacity: dragging ? 0.85 : undefined,
+                          borderLeftStyle: isGoogle ? "dashed" : undefined,
+                        }}
                       >
                         <span
                           className={`flex items-center gap-1 text-[11px] font-semibold leading-tight ${
                             short ? "" : "mb-0.5"
                           }`}
                         >
-                          {category ? (
+                          {isGoogle ? (
+                            <GoogleSourceIcon className="h-3 w-3 shrink-0 opacity-80" />
+                          ) : category ? (
                             <CategoryIcon icon={category.icon} className="h-3 w-3 shrink-0 opacity-80" />
                           ) : null}
                           <span className="truncate">{slot.event.title}</span>
@@ -336,8 +352,8 @@ export function TimeGrid({
                         )}
                       </button>
 
-                      {/* 上下の端: 引っ張って時間を変える */}
-                      {slot.event.allDay ? null : (
+                      {/* 上下の端: 引っ張って時間を変える（Google の予定は読み取り専用なので出さない） */}
+                      {slot.event.allDay || isGoogle ? null : (
                         <>
                           <span
                             role="presentation"

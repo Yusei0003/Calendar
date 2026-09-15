@@ -291,4 +291,38 @@ export const supabaseStore: Store = {
       .single();
     return toEvent(unwrap<EventRow>(result, "予定の復元"));
   },
+
+  // 以下、本人の Google カレンダー連携。
+  // 必ず対象の列だけを select / update し、Staff 型（一覧APIが返す形）を
+  // 経由しないこと。他のスタッフの秘密の URL が混ざって漏れるのを防ぐ。
+
+  async getGoogleIcalUrl(staffId) {
+    const { data, error } = await db()
+      .from("staff")
+      .select("google_ical_url")
+      .eq("id", staffId)
+      .maybeSingle();
+    if (error) throw new Error(`連携状況の取得に失敗しました: ${error.message}`);
+    return (data as { google_ical_url: string | null } | null)?.google_ical_url ?? null;
+  },
+
+  async setGoogleIcalUrl(staffId, url) {
+    const { error } = await db()
+      .from("staff")
+      .update({ google_ical_url: url })
+      .eq("id", staffId);
+    if (error) throw new Error(`連携の保存に失敗しました: ${error.message}`);
+  },
+
+  async listGoogleIcalLinks() {
+    const { data, error } = await db()
+      .from("staff")
+      .select("id, google_ical_url")
+      .not("google_ical_url", "is", null);
+    if (error) throw new Error(`連携一覧の取得に失敗しました: ${error.message}`);
+    return (data as { id: string; google_ical_url: string }[]).map((row) => ({
+      staffId: row.id,
+      url: row.google_ical_url,
+    }));
+  },
 };

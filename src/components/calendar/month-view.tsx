@@ -90,6 +90,8 @@ export function MonthView({
   };
 
   const beginDrag = (down: React.PointerEvent<HTMLElement>, event: CalendarEvent) => {
+    // Google カレンダーから取り込んだ予定は読み取り専用。動かせない。
+    if (event.source === "google") return;
     if (down.button !== 0 && down.pointerType === "mouse") return;
     down.stopPropagation();
     dragging.current = { event, patch: null };
@@ -215,7 +217,7 @@ export function MonthView({
                     category={categoryById.get(event.categoryId)}
                     staffName={event.staffId ? (staffById.get(event.staffId)?.name ?? null) : null}
                     onOpen={openUnlessDragging}
-                    onPointerDown={(down) => beginDrag(down, event)}
+                    onPointerDown={event.source === "google" ? undefined : (down) => beginDrag(down, event)}
                     compact
                   />
                 ))}

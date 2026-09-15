@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ConfirmDialog, type ConfirmRequest } from "@/components/calendar/confirm-dialog";
 import { FilterBar } from "@/components/calendar/filter-bar";
+import { GoogleEventPreview } from "@/components/calendar/google-event-preview";
 import { ListView } from "@/components/calendar/list-view";
 import { MonthView } from "@/components/calendar/month-view";
 import { DayView, WeekView } from "@/components/calendar/week-view";
@@ -238,7 +239,14 @@ export function CalendarApp({
     [actor.id, categories],
   );
 
+  /** Google カレンダーから取り込んだ、読み取り専用の予定を開いた状態。 */
+  const [googlePreview, setGooglePreview] = useState<CalendarEvent | null>(null);
+
   const openEvent = useCallback((event: CalendarEvent) => {
+    if (event.source === "google") {
+      setGooglePreview(event);
+      return;
+    }
     setPanel({ kind: "edit", form: eventToForm(event), event });
   }, []);
 
@@ -542,6 +550,10 @@ export function CalendarApp({
       ) : null}
 
       {confirmRequest ? <ConfirmDialog request={confirmRequest} /> : null}
+
+      {googlePreview ? (
+        <GoogleEventPreview event={googlePreview} onClose={() => setGooglePreview(null)} />
+      ) : null}
 
       <Toast message={toast} onDismiss={() => setToast(null)} />
     </div>

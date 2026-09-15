@@ -14,8 +14,16 @@ create table if not exists public.staff (
   color       text    not null default 'slate',
   sort_order  integer not null default 0,
   active      boolean not null default true,
-  created_at  timestamptz not null default now()
+  created_at  timestamptz not null default now(),
+  -- 本人の Google カレンダーの「秘密のアドレス（iCal形式）」。
+  -- 本人だけが設定・閲覧できる想定の秘密情報なので、スタッフ一覧を返す
+  -- API では絶対に含めないこと（src/lib/db/supabase.ts の toStaff 参照）。
+  google_ical_url text
 );
+
+-- 既存プロジェクトでこのファイルを再実行したとき用（新規プロジェクトでは
+-- 上の create table に含まれているので不要だが、何度実行しても安全）
+alter table public.staff add column if not exists google_ical_url text;
 
 -- ---------------------------------------------------------------------------
 -- 分類（マスタ。管理画面から随時追加できる）

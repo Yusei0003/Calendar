@@ -54,6 +54,13 @@ export interface Category {
 /** スタッフ個人の予定か、店舗全体の予定（イベント・営業）か。 */
 export type EventScope = "staff" | "store";
 
+/**
+ * スタッフ本人の Google カレンダーから読み取り専用で取り込んだ予定に付ける
+ * 分類ID。実在の分類マスタには存在しない予約語で、これを使うことで
+ * カテゴリ絞り込みからは自動的に外れる（絞り込み中に紛れ込まない）。
+ */
+export const GOOGLE_CATEGORY_ID = "__google__";
+
 export interface CalendarEvent {
   id: string;
   scope: EventScope;
@@ -78,6 +85,14 @@ export interface CalendarEvent {
   recurrenceRule: string | null;
   recurrenceUntil: string | null;
   parentEventId: string | null;
+
+  /**
+   * この予定の出どころ。省略時（DB に保存されている通常の予定）は "app"
+   * として扱う。"google" は本人の Google カレンダーから読み取り専用で
+   * 取り込んだもので、DB には保存されず毎回その場で合成される。
+   * 編集・削除・ドラッグの対象にしてはいけない。
+   */
+  source?: "app" | "google";
 }
 
 export type EventInput = Omit<

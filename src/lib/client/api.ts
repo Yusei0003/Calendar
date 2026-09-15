@@ -101,3 +101,20 @@ export async function updateCategory(id: string, patch: Partial<CategoryInput>) 
 export async function deleteCategory(id: string) {
   await request<{ ok: true }>(`/api/categories/${id}`, { method: "DELETE" });
 }
+
+/* --- 本人の Google カレンダー連携 --- */
+
+export async function getGoogleCalendarStatus() {
+  return request<{ connected: boolean }>("/api/me/google-calendar");
+}
+
+export async function connectGoogleCalendar(url: string) {
+  return request<{ connected: true; eventCount: number }>("/api/me/google-calendar", {
+    method: "PUT",
+    body: JSON.stringify({ url }),
+  });
+}
+
+export async function disconnectGoogleCalendar() {
+  return request<{ connected: false }>("/api/me/google-calendar", { method: "DELETE" });
+}

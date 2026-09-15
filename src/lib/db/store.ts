@@ -43,4 +43,15 @@ export interface Store {
   /** 論理削除。実データは残るので復旧できる。 */
   softDeleteEvent(id: string, actor: string): Promise<void>;
   restoreEvent(id: string, actor: string): Promise<CalendarEvent>;
+
+  /**
+   * 本人の Google カレンダー連携（秘密のiCal URL）。
+   *
+   * 必ず「本人が自分の分だけ」操作する前提の API（/api/me/google-calendar）
+   * からのみ呼び出すこと。他人の URL を読み書きできる経路を作らない。
+   */
+  getGoogleIcalUrl(staffId: string): Promise<string | null>;
+  setGoogleIcalUrl(staffId: string, url: string | null): Promise<void>;
+  /** 予定の合成に使う。URL を設定している全スタッフぶんをまとめて取得する。 */
+  listGoogleIcalLinks(): Promise<{ staffId: string; url: string }[]>;
 }
