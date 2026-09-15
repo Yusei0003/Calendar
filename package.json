@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "passcode": "node scripts/passcode.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
@@ -22,6 +23,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.20",
+    "playwright-core": "^1.63.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
     "typescript": "^5.6.3"
