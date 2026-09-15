@@ -14,7 +14,9 @@ export const SESSION_COOKIE = "klc_session";
 /** 名乗り（どのスタッフとして使っているか）。認証ではないので httpOnly にしない。 */
 export const ACTOR_COOKIE = "klc_actor";
 
-const SESSION_DAYS = 30;
+// 毎回合言葉を打ち直す手間を減らすため長めに保つ。端末を手放すときは
+// ログアウトするか、合言葉を変更すれば無効にできる。
+const SESSION_DAYS = 365;
 const SESSION_MAX_AGE = SESSION_DAYS * 24 * 60 * 60;
 
 /* ------------------------------------------------------------------ */
