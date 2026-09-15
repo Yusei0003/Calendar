@@ -1,0 +1,200 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   デザイントークン
+   ライト／ダークは端末設定に追従（C案）。data-theme で手動切替も可能。
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  --canvas: #f4f6fa;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --surface-3: #eef2f7;
+  --line: #dde3ec;
+  --line-soft: #eef1f6;
+  --ink: #0d1424;
+  --ink-muted: #5a6880;
+  --ink-faint: #8d99ae;
+
+  --brand: #4f46e5;
+  --brand-ink: #ffffff;
+  --danger: #dc2626;
+
+  --shadow-card: 0 1px 2px rgba(13, 20, 36, 0.05), 0 6px 20px -12px rgba(13, 20, 36, 0.28);
+  --shadow-pop: 0 12px 40px -12px rgba(13, 20, 36, 0.32), 0 2px 8px rgba(13, 20, 36, 0.08);
+
+  --grid-today: #eef2ff;
+  --grid-weekend: #f8fafc;
+  --now-line: #e11d48;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Hiragino Kaku Gothic ProN",
+    "Hiragino Sans", "Noto Sans JP", Meiryo, sans-serif;
+  --font-num: ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --canvas: #070a12;
+    --surface: #0e1421;
+    --surface-2: #141c2c;
+    --surface-3: #1b2436;
+    --line: #253044;
+    --line-soft: #1b2436;
+    --ink: #e9eef7;
+    --ink-muted: #94a1b8;
+    --ink-faint: #6b7890;
+
+    --brand: #6366f1;
+    --brand-ink: #ffffff;
+    --danger: #f87171;
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px -14px rgba(0, 0, 0, 0.9);
+    --shadow-pop: 0 16px 48px -16px rgba(0, 0, 0, 0.85), 0 2px 10px rgba(0, 0, 0, 0.5);
+
+    --grid-today: #141d33;
+    --grid-weekend: #0b111d;
+    --now-line: #fb7185;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --canvas: #070a12;
+  --surface: #0e1421;
+  --surface-2: #141c2c;
+  --surface-3: #1b2436;
+  --line: #253044;
+  --line-soft: #1b2436;
+  --ink: #e9eef7;
+  --ink-muted: #94a1b8;
+  --ink-faint: #6b7890;
+
+  --brand: #6366f1;
+  --brand-ink: #ffffff;
+  --danger: #f87171;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px -14px rgba(0, 0, 0, 0.9);
+  --shadow-pop: 0 16px 48px -16px rgba(0, 0, 0, 0.85), 0 2px 10px rgba(0, 0, 0, 0.5);
+
+  --grid-today: #141d33;
+  --grid-weekend: #0b111d;
+  --now-line: #fb7185;
+}
+
+/* --------------------------------------------------------------------------
+   アクセントカラー
+   スタッフ・分類に割り当てる色。要素に .a-<名前> を付けると、その配下で
+   --accent / --accent-soft / --accent-ink が使えるようになる。
+   -------------------------------------------------------------------------- */
+
+.a-cyan    { --accent: #0891b2; --accent-soft: #e0f7fb; --accent-ink: #0e5a6e; }
+.a-violet  { --accent: #7c3aed; --accent-soft: #efe8fe; --accent-ink: #5b21b6; }
+.a-amber   { --accent: #d97706; --accent-soft: #fef3c7; --accent-ink: #92400e; }
+.a-rose    { --accent: #e11d48; --accent-soft: #ffe4e9; --accent-ink: #9f1239; }
+.a-emerald { --accent: #059669; --accent-soft: #d9f7ea; --accent-ink: #065f46; }
+.a-blue    { --accent: #2563eb; --accent-soft: #dfe9ff; --accent-ink: #1e40af; }
+.a-orange  { --accent: #ea580c; --accent-soft: #ffe8d6; --accent-ink: #9a3412; }
+.a-pink    { --accent: #db2777; --accent-soft: #fde4f0; --accent-ink: #9d174d; }
+.a-teal    { --accent: #0d9488; --accent-soft: #d5f5f0; --accent-ink: #115e56; }
+.a-indigo  { --accent: #4f46e5; --accent-soft: #e5e6fd; --accent-ink: #3730a3; }
+.a-slate   { --accent: #64748b; --accent-soft: #eaeef4; --accent-ink: #334155; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .a-cyan    { --accent: #22d3ee; --accent-soft: #0b3a45; --accent-ink: #a5f0fb; }
+  :root:not([data-theme="light"]) .a-violet  { --accent: #a78bfa; --accent-soft: #2e2350; --accent-ink: #ddd2fe; }
+  :root:not([data-theme="light"]) .a-amber   { --accent: #fbbf24; --accent-soft: #43310c; --accent-ink: #fde9b5; }
+  :root:not([data-theme="light"]) .a-rose    { --accent: #fb7185; --accent-soft: #4a1526; --accent-ink: #ffd3da; }
+  :root:not([data-theme="light"]) .a-emerald { --accent: #34d399; --accent-soft: #0d3b2c; --accent-ink: #b4f2d9; }
+  :root:not([data-theme="light"]) .a-blue    { --accent: #60a5fa; --accent-soft: #142a52; --accent-ink: #cfe0ff; }
+  :root:not([data-theme="light"]) .a-orange  { --accent: #fb923c; --accent-soft: #4a2413; --accent-ink: #ffd9bd; }
+  :root:not([data-theme="light"]) .a-pink    { --accent: #f472b6; --accent-soft: #4a1733; --accent-ink: #fdd3e7; }
+  :root:not([data-theme="light"]) .a-teal    { --accent: #2dd4bf; --accent-soft: #0b3a37; --accent-ink: #aaf0e6; }
+  :root:not([data-theme="light"]) .a-indigo  { --accent: #818cf8; --accent-soft: #1f2250; --accent-ink: #d6d9fe; }
+  :root:not([data-theme="light"]) .a-slate   { --accent: #94a3b8; --accent-soft: #232c3c; --accent-ink: #dbe2ec; }
+}
+
+:root[data-theme="dark"] .a-cyan    { --accent: #22d3ee; --accent-soft: #0b3a45; --accent-ink: #a5f0fb; }
+:root[data-theme="dark"] .a-violet  { --accent: #a78bfa; --accent-soft: #2e2350; --accent-ink: #ddd2fe; }
+:root[data-theme="dark"] .a-amber   { --accent: #fbbf24; --accent-soft: #43310c; --accent-ink: #fde9b5; }
+:root[data-theme="dark"] .a-rose    { --accent: #fb7185; --accent-soft: #4a1526; --accent-ink: #ffd3da; }
+:root[data-theme="dark"] .a-emerald { --accent: #34d399; --accent-soft: #0d3b2c; --accent-ink: #b4f2d9; }
+:root[data-theme="dark"] .a-blue    { --accent: #60a5fa; --accent-soft: #142a52; --accent-ink: #cfe0ff; }
+:root[data-theme="dark"] .a-orange  { --accent: #fb923c; --accent-soft: #4a2413; --accent-ink: #ffd9bd; }
+:root[data-theme="dark"] .a-pink    { --accent: #f472b6; --accent-soft: #4a1733; --accent-ink: #fdd3e7; }
+:root[data-theme="dark"] .a-teal    { --accent: #2dd4bf; --accent-soft: #0b3a37; --accent-ink: #aaf0e6; }
+:root[data-theme="dark"] .a-indigo  { --accent: #818cf8; --accent-soft: #1f2250; --accent-ink: #d6d9fe; }
+:root[data-theme="dark"] .a-slate   { --accent: #94a3b8; --accent-soft: #232c3c; --accent-ink: #dbe2ec; }
+
+/* --------------------------------------------------------------------------
+   ベース
+   -------------------------------------------------------------------------- */
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    /* スマホのセーフエリア（ノッチ・ホームバー）を避ける */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* 数字・曜日が詰まって見えないよう字間を少し開ける */
+  .tabular {
+    font-family: var(--font-num);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 1.125rem;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* 予定チップ: 左端にアクセント色の帯、背景は淡いアクセント */
+  .chip {
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    border-left: 3px solid var(--accent);
+    transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .chip:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px -6px var(--accent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
