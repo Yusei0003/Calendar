@@ -412,7 +412,9 @@ export function CalendarApp({
         onPrev={() => step(-1)}
         onNext={() => step(1)}
         onToday={() => setAnchor(startOfDay(nowJst()))}
-        onOpenAdmin={() => notify("設定画面はこのあとの段階で追加します。")}
+        onOpenAdmin={() => {
+          window.location.href = "/settings";
+        }}
         onSwitchUser={() => {
           window.location.href = "/login/switch";
         }}

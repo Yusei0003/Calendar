@@ -1,6 +1,13 @@
 "use client";
 
-import type { CalendarEvent, EventInput } from "@/lib/types";
+import type {
+  CalendarEvent,
+  Category,
+  CategoryInput,
+  EventInput,
+  Staff,
+  StaffInput,
+} from "@/lib/types";
 
 /** サーバーが返したエラーメッセージをそのまま画面に出せるようにする。 */
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -55,4 +62,42 @@ export async function restoreEvent(id: string) {
     method: "POST",
   });
   return body.event;
+}
+
+/* --- スタッフ・分類のマスタ --- */
+
+export async function createStaff(input: StaffInput) {
+  const body = await request<{ staff: Staff }>("/api/staff", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return body.staff;
+}
+
+export async function updateStaff(id: string, patch: Partial<StaffInput>) {
+  const body = await request<{ staff: Staff }>(`/api/staff/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  return body.staff;
+}
+
+export async function createCategory(input: CategoryInput) {
+  const body = await request<{ category: Category }>("/api/categories", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return body.category;
+}
+
+export async function updateCategory(id: string, patch: Partial<CategoryInput>) {
+  const body = await request<{ category: Category }>(`/api/categories/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  return body.category;
+}
+
+export async function deleteCategory(id: string) {
+  await request<{ ok: true }>(`/api/categories/${id}`, { method: "DELETE" });
 }
