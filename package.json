@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "passcode": "node scripts/passcode.mjs"
+    "passcode": "node scripts/passcode.mjs",
+    "test": "node --experimental-strip-types --import ./scripts/test-setup.mjs --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

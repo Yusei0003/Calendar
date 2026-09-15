@@ -1,15 +1,22 @@
+import { redirect } from "next/navigation";
+
+import { CalendarApp } from "@/components/calendar/calendar-app";
 import { getActorId } from "@/lib/auth";
 import { getStore } from "@/lib/db";
 
-export default async function CalendarPage() {
-  const actorId = await getActorId();
-  const staff = await getStore().listStaff();
-  const me = staff.find((member) => member.id === actorId);
+// 常に最新のスタッフ・分類で描く（ビルド時に固定しない）
+export const dynamic = "force-dynamic";
 
-  return (
-    <main className="p-6">
-      <h1 className="text-xl font-bold">カレンダー</h1>
-      <p className="mt-2 text-sm text-ink-muted">ようこそ、{me?.name} さん。</p>
-    </main>
-  );
+export default async function CalendarPage() {
+  const store = getStore();
+  const [staff, categories, actorId] = await Promise.all([
+    store.listStaff(),
+    store.listCategories(),
+    getActorId(),
+  ]);
+
+  const actor = staff.find((member) => member.id === actorId);
+  if (!actor) redirect("/login");
+
+  return <CalendarApp staff={staff} categories={categories} actor={actor} />;
 }
