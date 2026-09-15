@@ -1,15 +1,19 @@
 "use client";
 
+import { useRef, useState } from "react";
+
 import { EventChip } from "@/components/calendar/event-chip";
+import { startGesture } from "@/lib/client/drag-gesture";
 import { byId, eventAccent } from "@/lib/display";
+import { isUnchanged, moveToDay, type DragPatch, type DragPreview } from "@/lib/drag";
 import {
   WEEKDAY_LABELS,
   dateKey,
+  formatDayLabel,
   jstDay,
   jstMonth,
   monthGrid,
   overlapsDay,
-  toJst,
 } from "@/lib/time";
 import type { CalendarEvent, Category, Staff } from "@/lib/types";
 
@@ -25,6 +29,8 @@ export function MonthView({
   onOpenEvent,
   onCreateAt,
   onOpenDay,
+  onDragPreview,
+  onCommitDrag,
 }: {
   anchor: Date;
   today: Date;
@@ -34,7 +40,15 @@ export function MonthView({
   onOpenEvent: (event: CalendarEvent) => void;
   onCreateAt: (day: Date) => void;
   onOpenDay: (day: Date) => void;
+  onDragPreview: (preview: DragPreview | null) => void;
+  onCommitDrag: (event: CalendarEvent, patch: DragPatch) => void;
 }) {
+  const cellRefs = useRef(new Map<string, HTMLDivElement>());
+  const dragging = useRef<{ event: CalendarEvent; patch: DragPatch | null } | null>(null);
+  const suppressClickUntil = useRef(0);
+  const [badge, setBadge] = useState<{ x: number; y: number; text: string } | null>(null);
+  const [hoverKey, setHoverKey] = useState<string | null>(null);
+
   const days = monthGrid(anchor);
   const staffById = byId(staff);
   const categoryById = byId(categories);
@@ -57,6 +71,62 @@ export function MonthView({
       return a.startsAt.localeCompare(b.startsAt);
     });
   }
+
+  /** 指・マウスの位置がどの日の枠にあるかを調べる。 */
+  const dayAt = (clientX: number, clientY: number): Date | null => {
+    for (const day of days) {
+      const rect = cellRefs.current.get(dateKey(day))?.getBoundingClientRect();
+      if (!rect) continue;
+      if (
+        clientX >= rect.left &&
+        clientX <= rect.right &&
+        clientY >= rect.top &&
+        clientY <= rect.bottom
+      ) {
+        return day;
+      }
+    }
+    return null;
+  };
+
+  const beginDrag = (down: React.PointerEvent<HTMLElement>, event: CalendarEvent) => {
+    if (down.button !== 0 && down.pointerType === "mouse") return;
+    down.stopPropagation();
+    dragging.current = { event, patch: null };
+
+    const update = (pointer: PointerEvent) => {
+      const day = dayAt(pointer.clientX, pointer.clientY);
+      if (!day || !dragging.current) return;
+      const patch = moveToDay(event, day);
+      dragging.current.patch = patch;
+      setHoverKey(dateKey(day));
+      onDragPreview({ id: event.id, ...patch });
+      setBadge({ x: pointer.clientX, y: pointer.clientY, text: formatDayLabel(day) + "へ" });
+    };
+
+    startGesture(down, {
+      onActivate: update,
+      onMove: update,
+      onEnd: (dragged) => {
+        const current = dragging.current;
+        dragging.current = null;
+        setBadge(null);
+        setHoverKey(null);
+
+        if (!dragged || !current?.patch || isUnchanged(current.event, current.patch)) {
+          onDragPreview(null);
+          return;
+        }
+        suppressClickUntil.current = Date.now() + 300;
+        onCommitDrag(current.event, current.patch);
+      },
+    });
+  };
+
+  const openUnlessDragging = (event: CalendarEvent) => {
+    if (Date.now() < suppressClickUntil.current) return;
+    onOpenEvent(event);
+  };
 
   return (
     <div className="card overflow-hidden">
@@ -90,17 +160,28 @@ export function MonthView({
           return (
             <div
               key={key}
-              onClick={() => onCreateAt(day)}
+              ref={(node) => {
+                if (node) cellRefs.current.set(key, node);
+                else cellRefs.current.delete(key);
+              }}
+              onClick={() => {
+                if (Date.now() < suppressClickUntil.current) return;
+                onCreateAt(day);
+              }}
               role="gridcell"
               aria-label={`${jstMonth(day)}月${jstDay(day)}日 予定${dayEvents.length}件`}
               className="min-h-[5.5rem] cursor-pointer border-b border-r p-1 transition-colors duration-150 last:border-r-0 sm:min-h-[7.5rem] sm:p-1.5"
               style={{
-                background: isToday
-                  ? "var(--grid-today)"
-                  : weekday === 0 || weekday === 6
-                    ? "var(--grid-weekend)"
-                    : "var(--surface)",
+                background:
+                  hoverKey === key
+                    ? "var(--surface-3)"
+                    : isToday
+                      ? "var(--grid-today)"
+                      : weekday === 0 || weekday === 6
+                        ? "var(--grid-weekend)"
+                        : "var(--surface)",
                 opacity: outside ? 0.45 : 1,
+                boxShadow: hoverKey === key ? "inset 0 0 0 2px var(--brand)" : undefined,
               }}
             >
               <div className="mb-1 flex items-center justify-between px-0.5">
@@ -133,7 +214,8 @@ export function MonthView({
                     accent={eventAccent(event, staffById, categoryById)}
                     category={categoryById.get(event.categoryId)}
                     staffName={event.staffId ? (staffById.get(event.staffId)?.name ?? null) : null}
-                    onOpen={onOpenEvent}
+                    onOpen={openUnlessDragging}
+                    onPointerDown={(down) => beginDrag(down, event)}
                     compact
                   />
                 ))}
@@ -154,6 +236,17 @@ export function MonthView({
           );
         })}
       </div>
+
+      {/* ドラッグ中に、離したらどの日になるかを示す */}
+      {badge ? (
+        <div
+          aria-live="polite"
+          className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-[160%] rounded-lg px-2.5 py-1.5 text-xs font-semibold shadow-pop"
+          style={{ left: badge.x, top: badge.y, background: "var(--ink)", color: "var(--canvas)" }}
+        >
+          {badge.text}
+        </div>
+      ) : null}
     </div>
   );
 }

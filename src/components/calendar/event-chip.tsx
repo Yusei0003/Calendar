@@ -31,6 +31,7 @@ export function EventChip({
   category,
   staffName,
   onOpen,
+  onPointerDown,
   compact = false,
 }: {
   event: CalendarEvent;
@@ -38,6 +39,7 @@ export function EventChip({
   category: Category | undefined;
   staffName: string | null;
   onOpen: (event: CalendarEvent) => void;
+  onPointerDown?: (down: React.PointerEvent<HTMLElement>) => void;
   compact?: boolean;
 }) {
   const time = event.allDay ? "終日" : formatTime(toJst(event.startsAt));
@@ -46,10 +48,12 @@ export function EventChip({
   return (
     <button
       type="button"
+      onPointerDown={onPointerDown}
       onClick={(clickEvent) => {
         clickEvent.stopPropagation();
         onOpen(event);
       }}
+      style={onPointerDown ? { touchAction: "none" } : undefined}
       aria-label={label}
       title={label}
       className={`a-${accent} chip flex w-full items-center gap-1.5 overflow-hidden rounded-md text-left ${

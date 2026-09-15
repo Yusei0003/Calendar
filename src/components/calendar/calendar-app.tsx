@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { ConfirmDialog, type ConfirmRequest } from "@/components/calendar/confirm-dialog";
 import { FilterBar } from "@/components/calendar/filter-bar";
 import { ListView } from "@/components/calendar/list-view";
 import { MonthView } from "@/components/calendar/month-view";
@@ -17,6 +18,7 @@ import {
   type EventDraft,
 } from "@/lib/client/api";
 import { removeEvent, upsertEvent, useEvents } from "@/lib/client/use-events";
+import { isUnchanged, type DragPatch, type DragPreview } from "@/lib/drag";
 import { eventToForm, newEventForm } from "@/lib/event-form";
 import {
   addDays,
@@ -109,6 +111,11 @@ export function CalendarApp({
   const [panel, setPanel] = useState<PanelMode | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  /** ドラッグ中の見た目。確定前の位置を画面にだけ反映する。 */
+  const [preview, setPreview] = useState<DragPreview | null>(null);
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
+  /** 直前の操作を取り消すための積み重ね。Ctrl+Z でも使う。 */
+  const undoStack = useRef<(() => void)[]>([]);
 
   // スマホはリスト、PCは月から始める。前回選んだ表示があればそれを優先する。
   useEffect(() => {
@@ -151,6 +158,23 @@ export function CalendarApp({
     setToast({ id: Date.now(), text, tone: "info", ...options });
   }, []);
 
+  /** 取り消せる操作を記録し、通知に「元に戻す」を出す。 */
+  const notifyUndoable = useCallback(
+    (text: string, undo: () => void) => {
+      undoStack.current.push(undo);
+      setToast({
+        id: Date.now(),
+        text,
+        tone: "info",
+        undo: () => {
+          const last = undoStack.current.pop();
+          last?.();
+        },
+      });
+    },
+    [],
+  );
+
   const notifyError = useCallback((cause: unknown) => {
     setToast({
       id: Date.now(),
@@ -171,6 +195,22 @@ export function CalendarApp({
       return staffOk && categoryOk;
     });
   }, [events, selectedStaff, selectedCategories]);
+
+  /** ドラッグ中の予定だけ、確定前の位置に差し替えて描く。 */
+  const displayedEvents = useMemo(() => {
+    if (!preview) return visibleEvents;
+    return visibleEvents.map((event) =>
+      event.id === preview.id
+        ? {
+            ...event,
+            startsAt: preview.startsAt,
+            endsAt: preview.endsAt,
+            staffId: preview.staffId === undefined ? event.staffId : preview.staffId,
+            scope: preview.scope ?? event.scope,
+          }
+        : event,
+    );
+  }, [visibleEvents, preview]);
 
   const toggle = (set: Set<string>, id: string) => {
     const next = new Set(set);
@@ -227,30 +267,114 @@ export function CalendarApp({
     [panel, applyLocal, notify, notifyError],
   );
 
+  /* --- ドラッグでの移動・時間変更 --- */
+
+  const applyPatch = useCallback(
+    async (event: CalendarEvent, patch: DragPatch, message: string) => {
+      const before: DragPatch = {
+        startsAt: event.startsAt,
+        endsAt: event.endsAt,
+        staffId: event.staffId,
+        scope: event.scope,
+      };
+      try {
+        const updated = await updateEvent(event.id, patch);
+        applyLocal((current) => upsertEvent(current, updated));
+        notifyUndoable(message, () => {
+          void (async () => {
+            try {
+              const reverted = await updateEvent(event.id, before);
+              applyLocal((current) => upsertEvent(current, reverted));
+              notify("元に戻しました。");
+            } catch (cause) {
+              notifyError(cause);
+            }
+          })();
+        });
+      } catch (cause) {
+        notifyError(cause);
+      } finally {
+        setPreview(null);
+      }
+    },
+    [applyLocal, notify, notifyError, notifyUndoable],
+  );
+
+  const commitDrag = useCallback(
+    (event: CalendarEvent, patch: DragPatch) => {
+      if (isUnchanged(event, patch, patch.staffId)) {
+        setPreview(null);
+        return;
+      }
+
+      // 過去に動かすのは操作ミスのことが多いので、一度だけ確認する
+      const todayStartMs = Date.parse(fromJst(startOfDay(nowJst())));
+      const movedToPast = Date.parse(patch.startsAt) < todayStartMs;
+      const wasInPast = Date.parse(event.startsAt) < todayStartMs;
+
+      if (movedToPast && !wasInPast) {
+        setConfirmRequest({
+          title: "過去の日付に移動します",
+          body: `「${event.title}」を過ぎた日時に移動しようとしています。よろしいですか？`,
+          confirmLabel: "移動する",
+          onConfirm: () => {
+            setConfirmRequest(null);
+            void applyPatch(event, patch, `「${event.title}」を移動しました。`);
+          },
+          onCancel: () => {
+            setConfirmRequest(null);
+            setPreview(null);
+          },
+        });
+        return;
+      }
+
+      void applyPatch(event, patch, `「${event.title}」を移動しました。`);
+    },
+    [applyPatch],
+  );
+
+  // Ctrl+Z / Cmd+Z でも直前の操作を取り消せるようにする
+  useEffect(() => {
+    const onKeyDown = (keyEvent: KeyboardEvent) => {
+      if (keyEvent.key !== "z" || !(keyEvent.ctrlKey || keyEvent.metaKey) || keyEvent.shiftKey) {
+        return;
+      }
+      const target = keyEvent.target as HTMLElement | null;
+      // 入力中の取り消しはブラウザ本来の動きに任せる
+      if (target && /^(INPUT|TEXTAREA)$/.test(target.tagName)) return;
+
+      const last = undoStack.current.pop();
+      if (!last) return;
+      keyEvent.preventDefault();
+      last();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const remove = useCallback(
     async (event: CalendarEvent) => {
       setPanel(null);
       try {
         await deleteEvent(event.id);
         applyLocal((current) => removeEvent(current, event.id));
-        notify(`「${event.title}」を削除しました。`, {
-          undo: () => {
-            void (async () => {
-              try {
-                const restored = await restoreEvent(event.id);
-                applyLocal((current) => upsertEvent(current, restored));
-                notify("削除を取り消しました。");
-              } catch (cause) {
-                notifyError(cause);
-              }
-            })();
-          },
+        notifyUndoable(`「${event.title}」を削除しました。`, () => {
+          void (async () => {
+            try {
+              const restored = await restoreEvent(event.id);
+              applyLocal((current) => upsertEvent(current, restored));
+              notify("削除を取り消しました。");
+            } catch (cause) {
+              notifyError(cause);
+            }
+          })();
         });
       } catch (cause) {
         notifyError(cause);
       }
     },
-    [applyLocal, notify, notifyError],
+    [applyLocal, notify, notifyError, notifyUndoable],
   );
 
   /** 同じ内容で別の日に。既定では翌日を開いた状態にする。 */
@@ -334,7 +458,7 @@ export function CalendarApp({
           <MonthView
             anchor={anchor}
             today={today}
-            events={visibleEvents}
+            events={displayedEvents}
             staff={staff}
             categories={categories}
             onOpenEvent={openEvent}
@@ -343,33 +467,39 @@ export function CalendarApp({
               setAnchor(day);
               changeView("day");
             }}
+            onDragPreview={setPreview}
+            onCommitDrag={commitDrag}
           />
         ) : view === "week" ? (
           <WeekView
             anchor={anchor}
             today={today}
-            events={visibleEvents}
+            events={displayedEvents}
             staff={staff}
             categories={categories}
             onOpenEvent={openEvent}
             onCreateAt={openCreate}
+            onDragPreview={setPreview}
+            onCommitDrag={commitDrag}
           />
         ) : view === "day" ? (
           <DayView
             anchor={anchor}
             today={today}
-            events={visibleEvents}
+            events={displayedEvents}
             staff={staff}
             categories={categories}
             onOpenEvent={openEvent}
             onCreateAt={openCreate}
+            onDragPreview={setPreview}
+            onCommitDrag={commitDrag}
           />
         ) : (
           <ListView
             from={startOfDay(anchor)}
             days={LIST_DAYS}
             today={today}
-            events={visibleEvents}
+            events={displayedEvents}
             staff={staff}
             categories={categories}
             onOpenEvent={openEvent}
@@ -408,6 +538,8 @@ export function CalendarApp({
           onDuplicate={duplicate}
         />
       ) : null}
+
+      {confirmRequest ? <ConfirmDialog request={confirmRequest} /> : null}
 
       <Toast message={toast} onDismiss={() => setToast(null)} />
     </div>

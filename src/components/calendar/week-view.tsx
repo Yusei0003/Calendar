@@ -2,6 +2,7 @@
 
 import { Avatar } from "@/components/avatar";
 import { TimeGrid, type GridColumn } from "@/components/calendar/time-grid";
+import type { DragPatch, DragPreview } from "@/lib/drag";
 import { WEEKDAY_LABELS, dateKey, jstDay, jstWeekday, weekGrid } from "@/lib/time";
 import type { CalendarEvent, Category, Staff } from "@/lib/types";
 
@@ -14,6 +15,8 @@ export function WeekView({
   categories,
   onOpenEvent,
   onCreateAt,
+  onDragPreview,
+  onCommitDrag,
 }: {
   anchor: Date;
   today: Date;
@@ -22,6 +25,8 @@ export function WeekView({
   categories: Category[];
   onOpenEvent: (event: CalendarEvent) => void;
   onCreateAt: (day: Date, minutes: number, staffId?: string | null) => void;
+  onDragPreview: (preview: DragPreview | null) => void;
+  onCommitDrag: (event: CalendarEvent, patch: DragPatch) => void;
 }) {
   const todayKey = dateKey(today);
 
@@ -68,6 +73,8 @@ export function WeekView({
       categories={categories}
       onOpenEvent={onOpenEvent}
       onCreateAt={onCreateAt}
+      onDragPreview={onDragPreview}
+      onCommitDrag={onCommitDrag}
     />
   );
 }
@@ -81,6 +88,8 @@ export function DayView({
   categories,
   onOpenEvent,
   onCreateAt,
+  onDragPreview,
+  onCommitDrag,
 }: {
   anchor: Date;
   today: Date;
@@ -89,6 +98,8 @@ export function DayView({
   categories: Category[];
   onOpenEvent: (event: CalendarEvent) => void;
   onCreateAt: (day: Date, minutes: number, staffId?: string | null) => void;
+  onDragPreview: (preview: DragPreview | null) => void;
+  onCommitDrag: (event: CalendarEvent, patch: DragPatch) => void;
 }) {
   const isToday = dateKey(anchor) === dateKey(today);
 
@@ -123,6 +134,8 @@ export function DayView({
       categories={categories}
       onOpenEvent={onOpenEvent}
       onCreateAt={onCreateAt}
+      onDragPreview={onDragPreview}
+      onCommitDrag={onCommitDrag}
     />
   );
 }
