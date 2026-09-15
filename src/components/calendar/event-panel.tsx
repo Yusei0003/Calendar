@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { Avatar } from "@/components/avatar";
 import { CategoryIcon } from "@/components/calendar/event-chip";
@@ -12,12 +12,30 @@ export type PanelMode =
   | { kind: "create"; form: EventForm }
   | { kind: "edit"; form: EventForm; event: CalendarEvent };
 
+/** 入力欄が1つだけの項目。label で包むと見出しを押しても入力欄に移れる。 */
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1.5">
       <span className="text-xs font-semibold text-ink-muted">{label}</span>
       {children}
     </label>
+  );
+}
+
+/**
+ * ボタンが並ぶ項目。
+ * label で包むと、先頭のボタンが見出しと他のボタンの文字までを
+ * 自分の読み上げ名として拾ってしまうため、group として組む。
+ */
+function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  const id = useId();
+  return (
+    <div role="group" aria-labelledby={id} className="flex flex-col gap-1.5">
+      <span id={id} className="text-xs font-semibold text-ink-muted">
+        {label}
+      </span>
+      {children}
+    </div>
   );
 }
 
@@ -32,6 +50,7 @@ export function EventPanel({
   mode,
   staff,
   categories,
+  defaultStaffId,
   saving,
   onClose,
   onSave,
@@ -41,6 +60,8 @@ export function EventPanel({
   mode: PanelMode;
   staff: Staff[];
   categories: Category[];
+  /** 種別をスタッフ予定に戻したときに選び直す担当者（名乗っている本人）。 */
+  defaultStaffId: string;
   saving: boolean;
   onClose: () => void;
   onSave: (draft: EventDraft) => void;
@@ -71,6 +92,17 @@ export function EventPanel({
   }, [onClose]);
 
   const patch = (next: Partial<EventForm>) => setForm((current) => ({ ...current, ...next }));
+
+  /**
+   * 種別を切り替える。
+   * 全体予定にしたときは担当者を外し、スタッフ予定に戻したときは本人を入れる。
+   */
+  const changeScope = (scope: EventForm["scope"]) =>
+    setForm((current) => ({
+      ...current,
+      scope,
+      staffId: scope === "store" ? "" : current.staffId || defaultStaffId,
+    }));
 
   const submit = () => {
     try {
@@ -141,7 +173,7 @@ export function EventPanel({
                     type="button"
                     role="radio"
                     aria-checked={active}
-                    onClick={() => patch({ scope: option.value })}
+                    onClick={() => changeScope(option.value)}
                     className="rounded-lg py-2 text-sm font-medium transition-colors duration-200"
                     style={
                       active
@@ -156,7 +188,7 @@ export function EventPanel({
             </div>
 
             {/* 担当スタッフ */}
-            <Field label={form.scope === "staff" ? "担当スタッフ" : "担当スタッフ（任意）"}>
+            <FieldGroup label={form.scope === "staff" ? "担当スタッフ" : "担当スタッフ（任意）"}>
               <div className="flex flex-wrap gap-1.5">
                 {form.scope === "store" ? (
                   <button
@@ -192,7 +224,7 @@ export function EventPanel({
                   );
                 })}
               </div>
-            </Field>
+            </FieldGroup>
 
             <Field label="件名">
               <input
@@ -276,7 +308,7 @@ export function EventPanel({
             </div>
 
             {/* 分類 */}
-            <Field label="分類">
+            <FieldGroup label="分類">
               <div className="flex flex-wrap gap-1.5">
                 {categories.map((category) => {
                   const active = form.categoryId === category.id;
@@ -298,7 +330,7 @@ export function EventPanel({
                   );
                 })}
               </div>
-            </Field>
+            </FieldGroup>
 
             <Field label="場所（任意）">
               <input

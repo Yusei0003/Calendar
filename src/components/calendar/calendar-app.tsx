@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { FilterBar } from "@/components/calendar/filter-bar";
+import { ListView } from "@/components/calendar/list-view";
 import { MonthView } from "@/components/calendar/month-view";
+import { DayView, WeekView } from "@/components/calendar/week-view";
 import { EventPanel, type PanelMode } from "@/components/calendar/event-panel";
 import { Toast, type ToastMessage } from "@/components/calendar/toast";
 import { Toolbar, type ViewKind } from "@/components/calendar/toolbar";
@@ -18,8 +20,10 @@ import { removeEvent, upsertEvent, useEvents } from "@/lib/client/use-events";
 import { eventToForm, newEventForm } from "@/lib/event-form";
 import {
   addDays,
+  addMinutes,
   addMonths,
   dateKey,
+  formatFullDate,
   formatMonthLabel,
   fromJst,
   monthGrid,
@@ -27,13 +31,66 @@ import {
   startOfDay,
   toInputValue,
   toJst,
+  weekGrid,
 } from "@/lib/time";
 import type { CalendarEvent, Category, Staff } from "@/lib/types";
 
-const VIEWS: ViewKind[] = ["month"];
+const VIEWS: ViewKind[] = ["month", "week", "day", "list"];
 
 /** 空いている枠を押して新規作成するときの既定の開始時刻。 */
 const DEFAULT_START_HOUR = 10;
+
+/** リスト表示で先に見せる日数 */
+const LIST_DAYS = 60;
+
+const VIEW_STORAGE_KEY = "klc-view";
+
+/** 表示中の期間。予定を取り出す範囲と、見出しの文言を決める。 */
+function viewRange(view: ViewKind, anchor: Date): { start: Date; end: Date } {
+  switch (view) {
+    case "month": {
+      const days = monthGrid(anchor);
+      return { start: days[0], end: addDays(days[41], 1) };
+    }
+    case "week": {
+      const days = weekGrid(anchor);
+      return { start: days[0], end: addDays(days[6], 1) };
+    }
+    case "day":
+      return { start: startOfDay(anchor), end: addDays(startOfDay(anchor), 1) };
+    case "list":
+      return { start: startOfDay(anchor), end: addDays(startOfDay(anchor), LIST_DAYS) };
+  }
+}
+
+function viewTitle(view: ViewKind, anchor: Date): string {
+  switch (view) {
+    case "month":
+      return formatMonthLabel(anchor);
+    case "week": {
+      const days = weekGrid(anchor);
+      return `${formatMonthLabel(days[0])} ${days[0].getUTCDate()}日 〜 ${days[6].getUTCDate()}日`;
+    }
+    case "day":
+      return formatFullDate(anchor);
+    case "list":
+      return "これからの予定";
+  }
+}
+
+/** 前後の移動幅。表示ごとに自然な単位で動かす。 */
+function stepAnchor(view: ViewKind, anchor: Date, direction: 1 | -1): Date {
+  switch (view) {
+    case "month":
+      return addMonths(anchor, direction);
+    case "week":
+      return addDays(anchor, 7 * direction);
+    case "day":
+      return addDays(anchor, direction);
+    case "list":
+      return addDays(anchor, 14 * direction);
+  }
+}
 
 export function CalendarApp({
   staff,
@@ -53,6 +110,30 @@ export function CalendarApp({
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
+  // スマホはリスト、PCは月から始める。前回選んだ表示があればそれを優先する。
+  useEffect(() => {
+    let remembered: string | null = null;
+    try {
+      remembered = localStorage.getItem(VIEW_STORAGE_KEY);
+    } catch {
+      /* 保存が使えない場合は画面幅だけで決める */
+    }
+    if (remembered && (VIEWS as string[]).includes(remembered)) {
+      setView(remembered as ViewKind);
+    } else if (window.matchMedia("(max-width: 640px)").matches) {
+      setView("list");
+    }
+  }, []);
+
+  const changeView = useCallback((next: ViewKind) => {
+    setView(next);
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      /* 保存できなくても表示の切り替えはできる */
+    }
+  }, []);
+
   // 日付が変わったら「今日」の位置を更新する（画面を開きっぱなしにする使い方のため）
   useEffect(() => {
     const timer = setInterval(() => setToday(startOfDay(nowJst())), 60_000);
@@ -60,9 +141,9 @@ export function CalendarApp({
   }, []);
 
   const range = useMemo(() => {
-    const days = monthGrid(anchor);
-    return { from: fromJst(days[0]), to: fromJst(addDays(days[41], 1)) };
-  }, [anchor]);
+    const { start, end } = viewRange(view, anchor);
+    return { from: fromJst(start), to: fromJst(end) };
+  }, [view, anchor]);
 
   const { events, error, applyLocal, reload } = useEvents(range.from, range.to);
 
@@ -101,15 +182,17 @@ export function CalendarApp({
   /* --- 予定を開く --- */
 
   const openCreate = useCallback(
-    (day: Date, hour = DEFAULT_START_HOUR) => {
-      const at = new Date(startOfDay(day).getTime() + hour * 60 * 60 * 1000);
+    (day: Date, minutes = DEFAULT_START_HOUR * 60, staffId?: string | null) => {
+      const at = addMinutes(startOfDay(day), minutes);
+      const form = newEventForm({
+        at,
+        staffId: staffId === undefined ? actor.id : (staffId ?? ""),
+        categoryId: categories[0]?.id ?? "",
+      });
+      // 日表示の「全体」列から作った場合は全体予定として始める
       setPanel({
         kind: "create",
-        form: newEventForm({
-          at,
-          staffId: actor.id,
-          categoryId: categories[0]?.id ?? "",
-        }),
+        form: staffId === null ? { ...form, scope: "store" } : form,
       });
     },
     [actor.id, categories],
@@ -190,17 +273,18 @@ export function CalendarApp({
 
   /* --- 期間の移動 --- */
 
-  const step = (direction: 1 | -1) => setAnchor((current) => addMonths(current, direction));
+  const step = (direction: 1 | -1) =>
+    setAnchor((current) => stepAnchor(view, current, direction));
 
   return (
     <div className="min-h-dvh">
       <Toolbar
-        title={formatMonthLabel(anchor)}
+        title={viewTitle(view, anchor)}
         subtitle={`${visibleEvents.length}件の予定`}
         view={view}
         views={VIEWS}
         actor={actor}
-        onChangeView={setView}
+        onChangeView={changeView}
         onPrev={() => step(-1)}
         onNext={() => step(1)}
         onToday={() => setAnchor(startOfDay(nowJst()))}
@@ -246,16 +330,51 @@ export function CalendarApp({
           </div>
         ) : null}
 
-        <MonthView
-          anchor={anchor}
-          today={today}
-          events={visibleEvents}
-          staff={staff}
-          categories={categories}
-          onOpenEvent={openEvent}
-          onCreateAt={(day) => openCreate(day)}
-          onOpenDay={(day) => setAnchor(day)}
-        />
+        {view === "month" ? (
+          <MonthView
+            anchor={anchor}
+            today={today}
+            events={visibleEvents}
+            staff={staff}
+            categories={categories}
+            onOpenEvent={openEvent}
+            onCreateAt={(day) => openCreate(day)}
+            onOpenDay={(day) => {
+              setAnchor(day);
+              changeView("day");
+            }}
+          />
+        ) : view === "week" ? (
+          <WeekView
+            anchor={anchor}
+            today={today}
+            events={visibleEvents}
+            staff={staff}
+            categories={categories}
+            onOpenEvent={openEvent}
+            onCreateAt={openCreate}
+          />
+        ) : view === "day" ? (
+          <DayView
+            anchor={anchor}
+            today={today}
+            events={visibleEvents}
+            staff={staff}
+            categories={categories}
+            onOpenEvent={openEvent}
+            onCreateAt={openCreate}
+          />
+        ) : (
+          <ListView
+            from={startOfDay(anchor)}
+            days={LIST_DAYS}
+            today={today}
+            events={visibleEvents}
+            staff={staff}
+            categories={categories}
+            onOpenEvent={openEvent}
+          />
+        )}
       </main>
 
       {/* スマホで片手でも押せるよう、追加ボタンは右下に固定する */}
@@ -281,6 +400,7 @@ export function CalendarApp({
           mode={panel}
           staff={staff}
           categories={categories}
+          defaultStaffId={actor.id}
           saving={saving}
           onClose={() => setPanel(null)}
           onSave={(draft) => void save(draft)}

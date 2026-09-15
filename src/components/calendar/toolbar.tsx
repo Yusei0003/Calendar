@@ -77,13 +77,16 @@ export function Toolbar({
             <div className="hidden sm:block">
               <ThemeToggle />
             </div>
+            <div className="sm:hidden">
+              <ThemeToggle compact />
+            </div>
 
             <button
               type="button"
               onClick={onOpenAdmin}
               aria-label="スタッフと分類の設定"
               title="スタッフと分類の設定"
-              className="hidden h-9 w-9 items-center justify-center rounded-lg text-ink-muted transition-colors hover:text-ink sm:flex"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-muted transition-colors hover:text-ink"
               style={{ background: "var(--surface-2)", border: "1px solid var(--line)" }}
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
