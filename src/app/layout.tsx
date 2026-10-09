@@ -5,6 +5,12 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "KESEN LARUS カレンダー",
   description: "KESEN LARUS スタッフの予定共有カレンダー",
+  // iPhone で「ホーム画面に追加」したとき、アプリのように全画面で開く
+  appleWebApp: {
+    capable: true,
+    title: "LARUS",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport: Viewport = {
@@ -12,8 +18,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f4f6fa" },
-    { media: "(prefers-color-scheme: dark)", color: "#070a12" },
+    { media: "(prefers-color-scheme: light)", color: "#f3f5f8" },
+    { media: "(prefers-color-scheme: dark)", color: "#050608" },
   ],
 };
 

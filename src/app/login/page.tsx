@@ -24,12 +24,19 @@ export default async function LoginPage() {
         />
       </div>
 
-      <div className="card relative w-full max-w-md p-7 sm:p-9">
+      <div
+        className="card relative w-full max-w-md overflow-hidden p-7 sm:p-9"
+        // ユニフォームの襟のような、チームカラーの帯
+        style={{ boxShadow: "inset 0 4px 0 var(--brand), var(--shadow-card)" }}
+      >
         <header className="mb-7">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-ink-faint">
-            KESEN LARUS
-          </p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight">
+          <span
+            role="img"
+            aria-label="KESEN LARUS"
+            className="brand-logo w-32 sm:w-36"
+            style={{ color: "var(--brand)" }}
+          />
+          <h1 className="mt-5 text-2xl font-bold tracking-tight">
             {signedIn ? "あなたは誰ですか？" : "スタッフカレンダー"}
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-ink-muted">

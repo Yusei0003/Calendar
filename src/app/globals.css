@@ -10,25 +10,25 @@
 :root {
   color-scheme: light;
 
-  --canvas: #f4f6fa;
+  --canvas: #f3f5f8;
   --surface: #ffffff;
-  --surface-2: #f8fafc;
-  --surface-3: #eef2f7;
-  --line: #dde3ec;
-  --line-soft: #eef1f6;
-  --ink: #0d1424;
-  --ink-muted: #5a6880;
-  --ink-faint: #8d99ae;
+  --surface-2: #f7f9fb;
+  --surface-3: #edf1f5;
+  --line: #dce2ea;
+  --line-soft: #edf1f5;
+  --ink: #0b1220;
+  --ink-muted: #566477;
+  --ink-faint: #8b97a8;
 
-  --brand: #4f46e5;
+  --brand: #2a6198;
   --brand-ink: #ffffff;
   --danger: #dc2626;
 
   --shadow-card: 0 1px 2px rgba(13, 20, 36, 0.05), 0 6px 20px -12px rgba(13, 20, 36, 0.28);
   --shadow-pop: 0 12px 40px -12px rgba(13, 20, 36, 0.32), 0 2px 8px rgba(13, 20, 36, 0.08);
 
-  --grid-today: #eef2ff;
-  --grid-weekend: #f8fafc;
+  --grid-today: #e9f0f8;
+  --grid-weekend: #f7f9fb;
   --now-line: #e11d48;
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Hiragino Kaku Gothic ProN",
@@ -40,25 +40,25 @@
   :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --canvas: #070a12;
-    --surface: #0e1421;
-    --surface-2: #141c2c;
-    --surface-3: #1b2436;
-    --line: #253044;
-    --line-soft: #1b2436;
-    --ink: #e9eef7;
-    --ink-muted: #94a1b8;
-    --ink-faint: #6b7890;
+    --canvas: #050608;
+    --surface: #0c0e11;
+    --surface-2: #12151a;
+    --surface-3: #191d23;
+    --line: #252a32;
+    --line-soft: #191d23;
+    --ink: #eef1f5;
+    --ink-muted: #98a2ae;
+    --ink-faint: #69727e;
 
-    --brand: #6366f1;
+    --brand: #3f86cc;
     --brand-ink: #ffffff;
     --danger: #f87171;
 
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px -14px rgba(0, 0, 0, 0.9);
     --shadow-pop: 0 16px 48px -16px rgba(0, 0, 0, 0.85), 0 2px 10px rgba(0, 0, 0, 0.5);
 
-    --grid-today: #141d33;
-    --grid-weekend: #0b111d;
+    --grid-today: #0f1a26;
+    --grid-weekend: #08090c;
     --now-line: #fb7185;
   }
 }
@@ -66,25 +66,25 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --canvas: #070a12;
-  --surface: #0e1421;
-  --surface-2: #141c2c;
-  --surface-3: #1b2436;
-  --line: #253044;
-  --line-soft: #1b2436;
-  --ink: #e9eef7;
-  --ink-muted: #94a1b8;
-  --ink-faint: #6b7890;
+  --canvas: #050608;
+  --surface: #0c0e11;
+  --surface-2: #12151a;
+  --surface-3: #191d23;
+  --line: #252a32;
+  --line-soft: #191d23;
+  --ink: #eef1f5;
+  --ink-muted: #98a2ae;
+  --ink-faint: #69727e;
 
-  --brand: #6366f1;
+  --brand: #3f86cc;
   --brand-ink: #ffffff;
   --danger: #f87171;
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px -14px rgba(0, 0, 0, 0.9);
   --shadow-pop: 0 16px 48px -16px rgba(0, 0, 0, 0.85), 0 2px 10px rgba(0, 0, 0, 0.5);
 
-  --grid-today: #141d33;
-  --grid-weekend: #0b111d;
+  --grid-today: #0f1a26;
+  --grid-weekend: #08090c;
   --now-line: #fb7185;
 }
 
@@ -173,6 +173,15 @@
     border: 1px solid var(--line);
     border-radius: 1.125rem;
     box-shadow: var(--shadow-card);
+  }
+
+  /* チームロゴ。画像は形だけを持ち、色は文字色（currentColor）で付ける */
+  .brand-logo {
+    display: block;
+    aspect-ratio: 506 / 312;
+    background: currentColor;
+    -webkit-mask: url("/brand/larus-logo.png") center / contain no-repeat;
+    mask: url("/brand/larus-logo.png") center / contain no-repeat;
   }
 
   /* 予定チップ: 左端にアクセント色の帯、背景は淡いアクセント */

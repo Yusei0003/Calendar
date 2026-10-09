@@ -64,10 +64,22 @@ export function Toolbar({
   return (
     <header
       className="sticky z-30 border-b"
-      style={{ top: "env(safe-area-inset-top, 0px)", background: "var(--surface)" }}
+      style={{
+        top: "env(safe-area-inset-top, 0px)",
+        background: "var(--surface)",
+        // ユニフォームの襟のような、チームカラーの細い帯
+        boxShadow: "inset 0 3px 0 var(--brand)",
+      }}
     >
-      <div className="mx-auto flex max-w-[1400px] flex-col gap-2 px-3 py-2.5 sm:px-5 sm:py-3">
-        <div className="flex items-center gap-2">
+      <div className="mx-auto flex max-w-[1400px] flex-col gap-2 px-3 pb-2.5 pt-3 sm:px-5 sm:pb-3 sm:pt-3.5">
+        <div className="flex items-center gap-2.5 sm:gap-3.5">
+          <span
+            role="img"
+            aria-label="KESEN LARUS"
+            className="brand-logo w-[52px] shrink-0 sm:w-[76px]"
+            style={{ color: "var(--brand)" }}
+          />
+          <span aria-hidden="true" className="h-8 w-px shrink-0" style={{ background: "var(--line)" }} />
           <div className="min-w-0">
             <h1 className="tabular truncate text-lg font-bold leading-tight sm:text-xl">{title}</h1>
             <p className="truncate text-[11px] text-ink-faint sm:text-xs">{subtitle}</p>
@@ -143,10 +155,10 @@ export function Toolbar({
                   role="tab"
                   aria-selected={active}
                   onClick={() => onChangeView(kind)}
-                  className="rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors duration-200"
+                  className="rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors duration-200"
                   style={
                     active
-                      ? { background: "var(--surface)", color: "var(--ink)", boxShadow: "var(--shadow-card)" }
+                      ? { background: "var(--brand)", color: "var(--brand-ink)", boxShadow: "var(--shadow-card)" }
                       : { color: "var(--ink-muted)" }
                   }
                 >
