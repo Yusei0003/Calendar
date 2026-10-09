@@ -1,5 +1,6 @@
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 
+import { ServerProblem } from "@/components/server-problem";
 import { getActorId, isSignedIn } from "@/lib/auth";
 import { listAllStaffForRequest } from "@/lib/db/cached";
 
@@ -14,7 +15,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!actorId) redirect("/login");
 
   // 名乗っているスタッフが削除・改名された場合にも備えて実在を確かめる
-  const staff = await listAllStaffForRequest();
+  let staff;
+  try {
+    staff = await listAllStaffForRequest();
+  } catch (error) {
+    // Next.js 内部の合図（動的な描画への切り替え等）は握りつぶさずに通す
+    unstable_rethrow(error);
+    console.error("[app]", error);
+    return <ServerProblem error={error} />;
+  }
   if (!staff.some((member) => member.id === actorId && member.active)) redirect("/login");
 
   return <>{children}</>;

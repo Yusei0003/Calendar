@@ -1,6 +1,7 @@
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 
 import { CalendarApp } from "@/components/calendar/calendar-app";
+import { ServerProblem } from "@/components/server-problem";
 import { getActorId } from "@/lib/auth";
 import { getStore } from "@/lib/db";
 import { listAllStaffForRequest } from "@/lib/db/cached";
@@ -10,11 +11,16 @@ export const dynamic = "force-dynamic";
 
 export default async function CalendarPage() {
   const store = getStore();
-  const [allStaff, categories, actorId] = await Promise.all([
-    listAllStaffForRequest(),
-    store.listCategories(),
-    getActorId(),
-  ]);
+  let loaded;
+  try {
+    loaded = await Promise.all([listAllStaffForRequest(), store.listCategories(), getActorId()]);
+  } catch (error) {
+    // Next.js 内部の合図（動的な描画への切り替え等）は握りつぶさずに通す
+    unstable_rethrow(error);
+    console.error("[calendar]", error);
+    return <ServerProblem error={error} />;
+  }
+  const [allStaff, categories, actorId] = loaded;
   const staff = allStaff.filter((member) => member.active);
 
   const actor = staff.find((member) => member.id === actorId);

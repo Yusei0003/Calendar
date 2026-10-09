@@ -1,17 +1,33 @@
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 
 import { PasscodeForm, StaffPicker } from "@/components/login-forms";
+import { ServerProblem } from "@/components/server-problem";
 import { getActorId, isPasscodeConfigured, isSignedIn } from "@/lib/auth";
 import { getStore } from "@/lib/db";
+import type { Staff } from "@/lib/types";
+
+// 毎回 Cookie を見て描く（ビルド時に固定しない）
+export const dynamic = "force-dynamic";
 
 export default async function LoginPage() {
-  const signedIn = await isSignedIn();
-  const actorId = await getActorId();
+  let signedIn = false;
+  let actorId: string | null = null;
+  let staff: Staff[] = [];
+  try {
+    signedIn = await isSignedIn();
+    actorId = await getActorId();
+    if (signedIn && !actorId) staff = await getStore().listStaff();
+  } catch (error) {
+    // 真っ白なエラー画面にせず、原因を表示する
+    // Next.js 内部の合図（動的な描画への切り替え等）は握りつぶさずに通す
+    unstable_rethrow(error);
+    console.error("[login]", error);
+    return <ServerProblem error={error} />;
+  }
 
   // 合言葉も名乗りも済んでいればカレンダーへ
   if (signedIn && actorId) redirect("/calendar");
 
-  const staff = signedIn ? await getStore().listStaff() : [];
   const configured = isPasscodeConfigured();
 
   return (
