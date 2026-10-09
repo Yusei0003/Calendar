@@ -172,6 +172,43 @@ describe("ICS の解析・展開", () => {
     assert.ok(!events.some((e) => e.startsAt === "2026-09-15T09:00:00.000Z"));
   });
 
+  it("期間より前に始まって期間中も続く予定を含める", () => {
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "BEGIN:VEVENT",
+      "UID:trip@google.com",
+      "DTSTAMP:20260801T000000Z",
+      "DTSTART;VALUE=DATE:20260830",
+      "DTEND;VALUE=DATE:20260903",
+      "SUMMARY:遠征",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+
+    const events = parseIcsToEvents(ics, from, to);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].title, "遠征");
+    assert.equal(events[0].startsAt, "2026-08-29T15:00:00.000Z");
+  });
+
+  it("期間の始まりちょうどに終わる予定は含めない", () => {
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "BEGIN:VEVENT",
+      "UID:before@google.com",
+      "DTSTAMP:20260801T000000Z",
+      "DTSTART:20260831T220000Z",
+      "DTEND:20260901T000000Z",
+      "SUMMARY:前日の夜",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+
+    assert.equal(parseIcsToEvents(ics, from, to).length, 0);
+  });
+
   it("期間の外にある予定は含めない", () => {
     const ics = [
       "BEGIN:VCALENDAR",

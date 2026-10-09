@@ -1,9 +1,11 @@
 import "server-only";
 
 import {
+  expandEvents,
   isAllowedGoogleIcalUrl,
-  parseIcsToEvents,
+  parseIcs,
   type GoogleEventInstance,
+  type ParsedIcs,
 } from "@/lib/ical-parse";
 import { GOOGLE_CATEGORY_ID } from "@/lib/types";
 import type { CalendarEvent } from "@/lib/types";
@@ -19,11 +21,17 @@ export { isAllowedGoogleIcalUrl };
  * 固定している（ical-parse.ts 参照）。
  */
 
-const FETCH_TIMEOUT_MS = 8_000;
+const FETCH_TIMEOUT_MS = 6_000;
 /** これを超える応答は読み込まない（異常に大きい ICS を弾く安全弁）。 */
 const MAX_RESPONSE_CHARS = 2 * 1024 * 1024;
 /** 取得結果を覚えておく時間。Google 側の更新も数時間おきなので十分。 */
 const CACHE_TTL_MS = 15 * 60 * 1000;
+/**
+ * 取得に失敗したことを覚えておく時間。これがないと、URL が無効になった人が
+ * いるだけで、30秒ごとの自動更新のたびに全員ぶん Google へ問い合わせ直し、
+ * 応答を待たされることになる。
+ */
+const FAILURE_TTL_MS = 5 * 60 * 1000;
 
 export class GoogleCalendarError extends Error {}
 
@@ -79,31 +87,41 @@ export async function fetchIcsTextFresh(url: string): Promise<string> {
 
 interface CacheEntry {
   fetchedAt: number;
-  text: string;
+  /** 解析済みの予定。取得・解析に失敗したときは null。 */
+  parsed: ParsedIcs | null;
 }
 
 /**
  * プロセス内メモリのキャッシュ。サーバーレス環境では実行環境が入れ替わると
  * 消えるが、その場合は次回また取得し直されるだけなので実害はない。
+ * 文字列ではなく解析済みの形で持つので、30秒ごとの自動更新のたびに
+ * 大きな ICS を解析し直すことはない。
  */
 const cache = new Map<string, CacheEntry>();
-const inflight = new Map<string, Promise<string | null>>();
+const inflight = new Map<string, Promise<ParsedIcs | null>>();
 
-async function getIcsTextCached(url: string): Promise<string | null> {
+function isFresh(entry: CacheEntry | undefined): entry is CacheEntry {
+  if (!entry) return false;
+  const ttl = entry.parsed ? CACHE_TTL_MS : FAILURE_TTL_MS;
+  return Date.now() - entry.fetchedAt < ttl;
+}
+
+async function getParsedCached(url: string): Promise<ParsedIcs | null> {
   const cached = cache.get(url);
-  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) return cached.text;
+  if (isFresh(cached)) return cached.parsed;
 
   const pending = inflight.get(url);
   if (pending) return pending;
 
   const promise = fetchIcsTextFresh(url)
-    .then((text) => {
-      cache.set(url, { fetchedAt: Date.now(), text });
-      return text;
-    })
+    .then((text) => parseIcs(text))
     .catch((error) => {
       console.error("[google-calendar] 取得に失敗しました:", (error as Error).message);
       return null;
+    })
+    .then((parsed) => {
+      cache.set(url, { fetchedAt: Date.now(), parsed });
+      return parsed;
     })
     .finally(() => {
       inflight.delete(url);
@@ -111,6 +129,11 @@ async function getIcsTextCached(url: string): Promise<string | null> {
 
   inflight.set(url, promise);
   return promise;
+}
+
+/** 連携を変えたとき（貼り直し・解除）に古い結果を使わないようにする。 */
+export function forgetCached(url: string): void {
+  cache.delete(url);
 }
 
 /* ------------------------------------------------------------------ */
@@ -144,7 +167,7 @@ function toCalendarEvent(staffId: string, instance: GoogleEventInstance): Calend
 
 /**
  * 1人ぶんの Google カレンダーの予定を取ってくる。
- * 通信・解析のどちらで失敗しても例外は投げず、空配列を返す
+ * 通信・解析のどちらで失敗しても例外は投げず、ok: false と空の予定を返す
  * （1人の連携が壊れていても、他の人の予定表示に影響させないため）。
  */
 export async function fetchGoogleEventsForStaff(
@@ -152,14 +175,17 @@ export async function fetchGoogleEventsForStaff(
   url: string,
   from: Date,
   to: Date,
-): Promise<CalendarEvent[]> {
-  const text = await getIcsTextCached(url);
-  if (!text) return [];
+): Promise<{ ok: boolean; events: CalendarEvent[] }> {
+  const parsed = await getParsedCached(url);
+  if (!parsed) return { ok: false, events: [] };
 
   try {
-    return parseIcsToEvents(text, from, to).map((instance) => toCalendarEvent(staffId, instance));
+    const events = expandEvents(parsed, from, to).map((instance) =>
+      toCalendarEvent(staffId, instance),
+    );
+    return { ok: true, events };
   } catch (error) {
-    console.error("[google-calendar] 解析に失敗しました:", (error as Error).message);
-    return [];
+    console.error("[google-calendar] 展開に失敗しました:", (error as Error).message);
+    return { ok: false, events: [] };
   }
 }

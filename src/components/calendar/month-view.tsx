@@ -2,23 +2,31 @@
 
 import { useRef, useState } from "react";
 
-import { EventChip } from "@/components/calendar/event-chip";
+import { CategoryIcon, EventChip, GoogleSourceIcon } from "@/components/calendar/event-chip";
 import { startGesture } from "@/lib/client/drag-gesture";
 import { byId, eventAccent } from "@/lib/display";
 import { isUnchanged, moveToDay, type DragPatch, type DragPreview } from "@/lib/drag";
+import { layoutWeek, type BarSegment } from "@/lib/month-layout";
 import {
   WEEKDAY_LABELS,
+  addDays,
   dateKey,
   formatDayLabel,
+  formatTime,
   jstDay,
   jstMonth,
   monthGrid,
-  overlapsDay,
+  startOfDay,
+  toJst,
 } from "@/lib/time";
-import type { CalendarEvent, Category, Staff } from "@/lib/types";
+import type { AccentColor, CalendarEvent, Category, Staff } from "@/lib/types";
 
-/** 1日の枠に並べる予定の上限。これを超えたぶんは「他◯件」にまとめる。 */
-const MAX_CHIPS = 3;
+/** 1日の枠に並べる予定（帯＋1日の予定）の上限。超えたぶんは「ほか◯件」にまとめる。 */
+const MAX_ITEMS = 3;
+/** 複数日の帯を何段まで重ねるか。 */
+const MAX_LANES = 2;
+/** 帯1段ぶんの高さ（px）。帯の高さ＋すき間。 */
+const LANE_PX = 23;
 
 export function MonthView({
   anchor,
@@ -55,22 +63,11 @@ export function MonthView({
   const currentMonth = jstMonth(anchor);
   const todayKey = dateKey(today);
 
-  // 日ごとに予定を割り振る。日をまたぐ予定は両方の日に出す。
-  const byDay = new Map<string, CalendarEvent[]>();
-  for (const day of days) byDay.set(dateKey(day), []);
-  for (const event of events) {
-    for (const day of days) {
-      if (overlapsDay(event.startsAt, event.endsAt, day)) {
-        byDay.get(dateKey(day))?.push(event);
-      }
-    }
-  }
-  for (const list of byDay.values()) {
-    list.sort((a, b) => {
-      if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
-      return a.startsAt.localeCompare(b.startsAt);
-    });
-  }
+  // 6週それぞれについて、複数日の帯と1日の予定の並べ方を決める
+  const weeks = Array.from({ length: 6 }, (_, index) => {
+    const weekDays = days.slice(index * 7, index * 7 + 7);
+    return { days: weekDays, layout: layoutWeek(weekDays, events, MAX_LANES) };
+  });
 
   /** 指・マウスの位置がどの日の枠にあるかを調べる。 */
   const dayAt = (clientX: number, clientY: number): Date | null => {
@@ -96,10 +93,19 @@ export function MonthView({
     down.stopPropagation();
     dragging.current = { event, patch: null };
 
+    // 何日にもまたがる帯の途中をつかんだときは、つかんだ位置と開始日の差を保って動かす
+    const grabbedDay = dayAt(down.clientX, down.clientY);
+    const grabOffset = grabbedDay
+      ? Math.round(
+          (startOfDay(grabbedDay).getTime() - startOfDay(toJst(event.startsAt)).getTime()) /
+            86_400_000,
+        )
+      : 0;
+
     const update = (pointer: PointerEvent) => {
       const day = dayAt(pointer.clientX, pointer.clientY);
       if (!day || !dragging.current) return;
-      const patch = moveToDay(event, day);
+      const patch = moveToDay(event, addDays(day, -grabOffset));
       dragging.current.patch = patch;
       setHoverKey(dateKey(day));
       onDragPreview({ id: event.id, ...patch });
@@ -148,96 +154,132 @@ export function MonthView({
         ))}
       </div>
 
-      {/* 6週×7日 */}
-      <div className="grid grid-cols-7">
-        {days.map((day) => {
-          const key = dateKey(day);
-          const dayEvents = byDay.get(key) ?? [];
-          const outside = jstMonth(day) !== currentMonth;
-          const isToday = key === todayKey;
-          const weekday = day.getUTCDay();
-          const shown = dayEvents.slice(0, MAX_CHIPS);
-          const hidden = dayEvents.length - shown.length;
+      {/* 6週×7日。週ごとに、複数日の帯を日の枠の上に重ねて描く */}
+      {weeks.map((week) => (
+        <div key={dateKey(week.days[0])} className="relative grid grid-cols-7">
+          {week.days.map((day, col) => {
+            const key = dateKey(day);
+            const singles = week.layout.singles[col];
+            const outside = jstMonth(day) !== currentMonth;
+            const isToday = key === todayKey;
+            const weekday = day.getUTCDay();
+            const room = Math.max(1, MAX_ITEMS - week.layout.laneCount);
+            const shown = singles.slice(0, room);
+            const hidden = singles.length - shown.length + week.layout.hiddenBars[col];
+            const total =
+              singles.length +
+              week.layout.hiddenBars[col] +
+              week.layout.bars.filter((bar) => bar.startCol <= col && col <= bar.endCol).length;
 
-          return (
-            <div
-              key={key}
-              ref={(node) => {
-                if (node) cellRefs.current.set(key, node);
-                else cellRefs.current.delete(key);
-              }}
-              onClick={() => {
-                if (Date.now() < suppressClickUntil.current) return;
-                onCreateAt(day);
-              }}
-              role="gridcell"
-              aria-label={`${jstMonth(day)}月${jstDay(day)}日 予定${dayEvents.length}件`}
-              className="min-h-[5.5rem] cursor-pointer border-b border-r p-1 transition-colors duration-150 last:border-r-0 sm:min-h-[7.5rem] sm:p-1.5"
-              style={{
-                background:
-                  hoverKey === key
-                    ? "var(--surface-3)"
-                    : isToday
-                      ? "var(--grid-today)"
-                      : weekday === 0 || weekday === 6
-                        ? "var(--grid-weekend)"
-                        : "var(--surface)",
-                opacity: outside ? 0.45 : 1,
-                boxShadow: hoverKey === key ? "inset 0 0 0 2px var(--brand)" : undefined,
-              }}
-            >
-              <div className="mb-1 flex items-center justify-between px-0.5">
-                <span
-                  className={`tabular inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs ${
-                    isToday ? "font-bold" : "font-medium"
-                  }`}
-                  style={
-                    isToday
-                      ? { background: "var(--brand)", color: "var(--brand-ink)" }
-                      : {
-                          color:
-                            weekday === 0
-                              ? "var(--now-line)"
-                              : weekday === 6
-                                ? "var(--brand)"
-                                : "var(--ink-muted)",
-                        }
-                  }
+            return (
+              <div
+                key={key}
+                ref={(node) => {
+                  if (node) cellRefs.current.set(key, node);
+                  else cellRefs.current.delete(key);
+                }}
+                onClick={() => {
+                  if (Date.now() < suppressClickUntil.current) return;
+                  onCreateAt(day);
+                }}
+                role="gridcell"
+                aria-label={`${jstMonth(day)}月${jstDay(day)}日 予定${total}件`}
+                className="min-h-[5.5rem] cursor-pointer border-b border-r p-1 transition-colors duration-150 last:border-r-0 sm:min-h-[7.5rem] sm:p-1.5"
+                style={{
+                  background:
+                    hoverKey === key
+                      ? "var(--surface-3)"
+                      : outside
+                        ? "var(--canvas)"
+                        : isToday
+                        ? "var(--grid-today)"
+                        : weekday === 0 || weekday === 6
+                          ? "var(--grid-weekend)"
+                          : "var(--surface)",
+                  boxShadow: hoverKey === key ? "inset 0 0 0 2px var(--brand)" : undefined,
+                }}
+              >
+                <div
+                  className="mb-1 flex h-5 items-center justify-between px-0.5"
+                  style={{ opacity: outside ? 0.45 : 1 }}
                 >
-                  {jstDay(day)}
-                </span>
-              </div>
-
-              <div className="flex flex-col gap-[3px]">
-                {shown.map((event) => (
-                  <EventChip
-                    key={`${key}-${event.id}`}
-                    event={event}
-                    accent={eventAccent(event, staffById, categoryById)}
-                    category={categoryById.get(event.categoryId)}
-                    staffName={event.staffId ? (staffById.get(event.staffId)?.name ?? null) : null}
-                    onOpen={openUnlessDragging}
-                    onPointerDown={event.source === "google" ? undefined : (down) => beginDrag(down, event)}
-                    compact
-                  />
-                ))}
-                {hidden > 0 ? (
-                  <button
-                    type="button"
-                    onClick={(clickEvent) => {
-                      clickEvent.stopPropagation();
-                      onOpenDay(day);
-                    }}
-                    className="rounded px-1.5 py-[2px] text-left text-[11px] font-medium text-ink-muted transition-colors hover:text-ink"
+                  <span
+                    className={`tabular inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs ${
+                      isToday ? "font-bold" : "font-medium"
+                    }`}
+                    style={
+                      isToday
+                        ? { background: "var(--brand)", color: "var(--brand-ink)" }
+                        : {
+                            color:
+                              weekday === 0
+                                ? "var(--now-line)"
+                                : weekday === 6
+                                  ? "var(--brand)"
+                                  : "var(--ink-muted)",
+                          }
+                    }
                   >
-                    ほか{hidden}件
-                  </button>
-                ) : null}
+                    {jstDay(day)}
+                  </span>
+                </div>
+
+                {/* 帯のぶんの場所をあけておく */}
+                <div aria-hidden="true" style={{ height: week.layout.laneCount * LANE_PX }} />
+
+                <div
+                  className="flex flex-col gap-[3px]"
+                  style={{ opacity: outside ? 0.55 : 1 }}
+                >
+                  {shown.map((event) => (
+                    <EventChip
+                      key={`${key}-${event.id}`}
+                      event={event}
+                      accent={eventAccent(event, staffById, categoryById)}
+                      category={categoryById.get(event.categoryId)}
+                      staffName={event.staffId ? (staffById.get(event.staffId)?.name ?? null) : null}
+                      onOpen={openUnlessDragging}
+                      onPointerDown={event.source === "google" ? undefined : (down) => beginDrag(down, event)}
+                      compact
+                    />
+                  ))}
+                  {hidden > 0 ? (
+                    <button
+                      type="button"
+                      onClick={(clickEvent) => {
+                        clickEvent.stopPropagation();
+                        onOpenDay(day);
+                      }}
+                      className="rounded px-1.5 py-[2px] text-left text-[11px] font-medium text-ink-muted transition-colors hover:text-ink"
+                    >
+                      ほか{hidden}件
+                    </button>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+
+          {/* 複数日の帯。日の番号の下に、週の行をまたいで重ねる */}
+          <div className="pointer-events-none absolute inset-x-0 top-[28px] sm:top-[30px]">
+            {week.layout.bars.map((bar) => (
+              <SpanBar
+                key={`${dateKey(week.days[0])}-${bar.event.id}`}
+                bar={bar}
+                accent={eventAccent(bar.event, staffById, categoryById)}
+                category={categoryById.get(bar.event.categoryId)}
+                staffName={
+                  bar.event.staffId ? (staffById.get(bar.event.staffId)?.name ?? null) : null
+                }
+                onOpen={openUnlessDragging}
+                onPointerDown={
+                  bar.event.source === "google" ? undefined : (down) => beginDrag(down, bar.event)
+                }
+              />
+            ))}
+          </div>
+        </div>
+      ))}
 
       {/* ドラッグ中に、離したらどの日になるかを示す */}
       {badge ? (
@@ -250,5 +292,86 @@ export function MonthView({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** 何日にもまたがる予定の帯。週をまたぐときは端を角にして「続き」を表す。 */
+function SpanBar({
+  bar,
+  accent,
+  category,
+  staffName,
+  onOpen,
+  onPointerDown,
+}: {
+  bar: BarSegment;
+  accent: AccentColor;
+  category: Category | undefined;
+  staffName: string | null;
+  onOpen: (event: CalendarEvent) => void;
+  onPointerDown?: (down: React.PointerEvent<HTMLElement>) => void;
+}) {
+  const { event } = bar;
+  const isGoogle = event.source === "google";
+  // 途中の週から続いている帯では、時刻は出さない（始まりの週だけに出す）
+  const time =
+    event.allDay || bar.continuesBefore ? null : formatTime(toJst(event.startsAt));
+  const label = [
+    event.allDay ? "終日" : formatTime(toJst(event.startsAt)),
+    staffName,
+    event.title,
+    isGoogle ? "（Googleカレンダー・読み取り専用）" : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const span = bar.endCol - bar.startCol + 1;
+  const inset = 3;
+
+  return (
+    <button
+      type="button"
+      onPointerDown={onPointerDown}
+      onClick={(clickEvent) => {
+        clickEvent.stopPropagation();
+        onOpen(event);
+      }}
+      aria-label={label}
+      title={label}
+      className={`a-${accent} chip pointer-events-auto absolute flex h-5 items-center gap-1.5 overflow-hidden px-1.5 text-left text-[11px] ${
+        isGoogle ? "opacity-90" : ""
+      }`}
+      style={{
+        top: bar.lane * LANE_PX,
+        left: `calc(${bar.startCol} * 100% / 7 + ${bar.continuesBefore ? 0 : inset}px)`,
+        width: `calc(${span} * 100% / 7 - ${(bar.continuesBefore ? 0 : inset) + (bar.continuesAfter ? 0 : inset)}px)`,
+        borderTopLeftRadius: bar.continuesBefore ? 0 : 6,
+        borderBottomLeftRadius: bar.continuesBefore ? 0 : 6,
+        borderTopRightRadius: bar.continuesAfter ? 0 : 6,
+        borderBottomRightRadius: bar.continuesAfter ? 0 : 6,
+        borderLeftWidth: bar.continuesBefore ? 0 : undefined,
+        borderLeftStyle: isGoogle ? "dashed" : undefined,
+        ...(onPointerDown ? { touchAction: "none" } : undefined),
+      }}
+    >
+      {bar.continuesBefore ? (
+        <span aria-hidden="true" className="shrink-0 opacity-70">
+          ‹
+        </span>
+      ) : isGoogle ? (
+        <GoogleSourceIcon className="hidden h-3 w-3 shrink-0 opacity-80 sm:block" />
+      ) : category ? (
+        <CategoryIcon icon={category.icon} className="hidden h-3 w-3 shrink-0 opacity-80 sm:block" />
+      ) : null}
+      {time ? <span className="tabular hidden shrink-0 font-semibold opacity-80 sm:inline">{time}</span> : null}
+      <span className="truncate font-semibold">{event.title}</span>
+      {staffName && span > 1 ? (
+        <span className="hidden shrink-0 truncate text-[10px] opacity-70 sm:inline">{staffName}</span>
+      ) : null}
+      {bar.continuesAfter ? (
+        <span aria-hidden="true" className="ml-auto shrink-0 opacity-70">
+          ›
+        </span>
+      ) : null}
+    </button>
   );
 }

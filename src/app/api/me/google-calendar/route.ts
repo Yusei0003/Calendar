@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { handleError, isResponse, requireActor } from "@/lib/api";
 import { getStore } from "@/lib/db";
-import { fetchIcsTextFresh, GoogleCalendarError } from "@/lib/google-calendar";
+import { fetchIcsTextFresh, forgetCached, GoogleCalendarError } from "@/lib/google-calendar";
 import { parseIcsToEvents } from "@/lib/ical-parse";
 
 /**
@@ -22,7 +22,19 @@ export async function GET() {
     const url = await getStore().getGoogleIcalUrl(actor.id);
     // URL そのものは返さない（設定画面を開いた人全員に秘密の文字列が
     // 見えてしまうのを避けるため）。連携しているかどうかだけ知らせる。
-    return NextResponse.json({ connected: Boolean(url) });
+    if (!url) return NextResponse.json({ connected: false });
+
+    // Google 側で「秘密のアドレス」を作り直すと、登録済みの URL は使えなくなる。
+    // 設定画面を開いたときに実際に読めるか確かめ、壊れていれば知らせる。
+    try {
+      forgetCached(url);
+      await fetchIcsTextFresh(url);
+      return NextResponse.json({ connected: true, problem: null });
+    } catch (error) {
+      const problem =
+        error instanceof GoogleCalendarError ? error.message : "読み込みを確認できませんでした。";
+      return NextResponse.json({ connected: true, problem });
+    }
   } catch (error) {
     return handleError(error);
   }
@@ -48,7 +60,10 @@ export async function PUT(request: Request) {
     const previewTo = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
     const eventCount = parseIcsToEvents(text, now, previewTo).length;
 
-    await getStore().setGoogleIcalUrl(actor.id, url);
+    const store = getStore();
+    const previous = await store.getGoogleIcalUrl(actor.id);
+    if (previous) forgetCached(previous);
+    await store.setGoogleIcalUrl(actor.id, url);
     return NextResponse.json({ connected: true, eventCount });
   } catch (error) {
     if (error instanceof GoogleCalendarError) {
@@ -63,7 +78,10 @@ export async function DELETE() {
   if (isResponse(actor)) return actor;
 
   try {
-    await getStore().setGoogleIcalUrl(actor.id, null);
+    const store = getStore();
+    const previous = await store.getGoogleIcalUrl(actor.id);
+    if (previous) forgetCached(previous);
+    await store.setGoogleIcalUrl(actor.id, null);
     return NextResponse.json({ connected: false });
   } catch (error) {
     return handleError(error);

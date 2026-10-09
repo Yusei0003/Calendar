@@ -22,12 +22,16 @@ export function GoogleCalendarSection({ actorName }: { actorName: string }) {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; tone: "info" | "error" } | null>(null);
+  /** 連携はしているが、今は読み込めない理由（Google 側でURLを作り直した等）。 */
+  const [problem, setProblem] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void getGoogleCalendarStatus()
       .then((body) => {
-        if (!cancelled) setStatus(body.connected ? "connected" : "disconnected");
+        if (cancelled) return;
+        setStatus(body.connected ? "connected" : "disconnected");
+        setProblem(body.problem ?? null);
       })
       .catch(() => {
         if (!cancelled) setStatus("disconnected");
@@ -45,6 +49,7 @@ export function GoogleCalendarSection({ actorName }: { actorName: string }) {
     try {
       const body = await connectGoogleCalendar(trimmed);
       setStatus("connected");
+      setProblem(null);
       setUrl("");
       setMessage({
         text:
@@ -69,6 +74,7 @@ export function GoogleCalendarSection({ actorName }: { actorName: string }) {
     try {
       await disconnectGoogleCalendar();
       setStatus("disconnected");
+      setProblem(null);
       setMessage({ text: "連携を解除しました。", tone: "info" });
     } catch (cause) {
       setMessage({
@@ -93,18 +99,25 @@ export function GoogleCalendarSection({ actorName }: { actorName: string }) {
       <div className="flex flex-col gap-3 px-5 py-4">
         {status === "loading" ? (
           <p className="text-sm text-ink-faint">確認しています…</p>
-        ) : status === "connected" ? (
+        ) : null}
+
+        {status === "connected" ? (
           <div className="flex items-center justify-between gap-3">
             <span
               className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
-              style={{ background: "var(--accent-soft, var(--surface-3))", color: "var(--ink)" }}
+              style={{
+                background: problem
+                  ? "color-mix(in srgb, var(--danger) 12%, transparent)"
+                  : "var(--surface-3)",
+                color: problem ? "var(--danger)" : "var(--ink)",
+              }}
             >
               <span
                 aria-hidden="true"
                 className="h-2 w-2 rounded-full"
-                style={{ background: "var(--brand)" }}
+                style={{ background: problem ? "var(--danger)" : "var(--brand)" }}
               />
-              連携中
+              {problem ? "連携中（読み込めていません）" : "連携中"}
             </span>
             <button
               type="button"
@@ -116,7 +129,20 @@ export function GoogleCalendarSection({ actorName }: { actorName: string }) {
               連携を解除
             </button>
           </div>
-        ) : (
+        ) : null}
+
+        {problem ? (
+          <p
+            role="alert"
+            className="rounded-xl px-3 py-2 text-xs leading-relaxed"
+            style={{ background: "color-mix(in srgb, var(--danger) 12%, transparent)", color: "var(--danger)" }}
+          >
+            {problem}
+            Googleカレンダーで「秘密のアドレス」を作り直した場合は、新しいURLを下に貼り直してください。
+          </p>
+        ) : null}
+
+        {status === "disconnected" || (status === "connected" && problem) ? (
           <div className="flex flex-col gap-2 sm:flex-row">
             <input
               value={url}
@@ -132,10 +158,10 @@ export function GoogleCalendarSection({ actorName }: { actorName: string }) {
               className="h-10 shrink-0 rounded-xl px-4 text-sm font-semibold disabled:opacity-50"
               style={{ background: "var(--brand)", color: "var(--brand-ink)" }}
             >
-              {busy ? "確認中…" : "連携する"}
+              {busy ? "確認中…" : problem ? "貼り直す" : "連携する"}
             </button>
           </div>
-        )}
+        ) : null}
 
         {message ? (
           <p

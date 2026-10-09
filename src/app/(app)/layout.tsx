@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { getActorId, isSignedIn } from "@/lib/auth";
-import { getStore } from "@/lib/db";
+import { listAllStaffForRequest } from "@/lib/db/cached";
 
 /**
  * ログインが必要な画面の入り口。
@@ -14,8 +14,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!actorId) redirect("/login");
 
   // 名乗っているスタッフが削除・改名された場合にも備えて実在を確かめる
-  const staff = await getStore().listStaff();
-  if (!staff.some((member) => member.id === actorId)) redirect("/login");
+  const staff = await listAllStaffForRequest();
+  if (!staff.some((member) => member.id === actorId && member.active)) redirect("/login");
 
   return <>{children}</>;
 }

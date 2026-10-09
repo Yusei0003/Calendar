@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { ConfirmDialog, type ConfirmRequest } from "@/components/calendar/confirm-dialog";
 import { FilterBar } from "@/components/calendar/filter-bar";
@@ -14,6 +16,7 @@ import { Toolbar, type ViewKind } from "@/components/calendar/toolbar";
 import {
   createEvent,
   deleteEvent,
+  isConflict,
   restoreEvent,
   updateEvent,
   type EventDraft,
@@ -47,6 +50,11 @@ const DEFAULT_START_HOUR = 10;
 const LIST_DAYS = 60;
 
 const VIEW_STORAGE_KEY = "klc-view";
+
+/** スマホ幅か。画面の狭さで、日付を押したときの動きを変える。 */
+function isNarrowScreen(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches;
+}
 
 /** 表示中の期間。予定を取り出す範囲と、見出しの文言を決める。 */
 function viewRange(view: ViewKind, anchor: Date): { start: Date; end: Date } {
@@ -115,8 +123,13 @@ export function CalendarApp({
   /** ドラッグ中の見た目。確定前の位置を画面にだけ反映する。 */
   const [preview, setPreview] = useState<DragPreview | null>(null);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
-  /** 直前の操作を取り消すための積み重ね。Ctrl+Z でも使う。 */
-  const undoStack = useRef<(() => void)[]>([]);
+  /**
+   * 直前の操作の取り消し。「元に戻す」の通知が出ているあいだだけ有効で、
+   * 通知が消えたら取り消せなくなる（Ctrl+Z も同じ）。時間が経ってから
+   * 古い操作が戻り、その間のほかの人の変更を上書きしてしまうのを防ぐため。
+   */
+  const pendingUndo = useRef<(() => void) | null>(null);
+  const router = useRouter();
 
   // スマホはリスト、PCは月から始める。前回選んだ表示があればそれを優先する。
   useEffect(() => {
@@ -153,44 +166,58 @@ export function CalendarApp({
     return { from: fromJst(start), to: fromJst(end) };
   }, [view, anchor]);
 
-  const { events, error, applyLocal, reload } = useEvents(range.from, range.to);
+  const { events, error, ownGoogleFailed, applyLocal, reload } = useEvents(range.from, range.to);
 
-  const notify = useCallback((text: string, options: Partial<ToastMessage> = {}) => {
-    setToast({ id: Date.now(), text, tone: "info", ...options });
+  /** 通知を出す。前の通知の「元に戻す」は、通知が置き換わった時点で使えなくなる。 */
+  const showToast = useCallback((message: ToastMessage) => {
+    pendingUndo.current = message.undo ?? null;
+    setToast(message);
   }, []);
+
+  const dismissToast = useCallback(() => {
+    pendingUndo.current = null;
+    setToast(null);
+  }, []);
+
+  const notify = useCallback(
+    (text: string, options: Partial<ToastMessage> = {}) => {
+      showToast({ id: Date.now(), text, tone: "info", ...options });
+    },
+    [showToast],
+  );
 
   /** 取り消せる操作を記録し、通知に「元に戻す」を出す。 */
   const notifyUndoable = useCallback(
     (text: string, undo: () => void) => {
-      undoStack.current.push(undo);
-      setToast({
-        id: Date.now(),
-        text,
-        tone: "info",
-        undo: () => {
-          const last = undoStack.current.pop();
-          last?.();
-        },
-      });
+      showToast({ id: Date.now(), text, tone: "info", undo });
     },
-    [],
+    [showToast],
   );
 
-  const notifyError = useCallback((cause: unknown) => {
-    setToast({
-      id: Date.now(),
-      text: cause instanceof Error ? cause.message : "うまくいきませんでした。",
-      tone: "error",
-    });
-  }, []);
+  /** うまくいかなかったことを知らせる。ほかの人と変更がぶつかったときは最新を読み直す。 */
+  const notifyError = useCallback(
+    (cause: unknown) => {
+      if (isConflict(cause)) void reload();
+      showToast({
+        id: Date.now(),
+        text: cause instanceof Error ? cause.message : "うまくいきませんでした。",
+        tone: "error",
+      });
+    },
+    [reload, showToast],
+  );
 
   /* --- 絞り込み --- */
 
   const visibleEvents = useMemo(() => {
     if (selectedStaff.size === 0 && selectedCategories.size === 0) return events;
     return events.filter((event) => {
+      // 「全体」の予定（店・クラブ全体のイベントなど）は誰にでも関係するので、
+      // スタッフで絞り込んでいても残す。分類での絞り込みには従う。
       const staffOk =
-        selectedStaff.size === 0 || (event.staffId ? selectedStaff.has(event.staffId) : false);
+        selectedStaff.size === 0 ||
+        event.scope === "store" ||
+        (event.staffId ? selectedStaff.has(event.staffId) : false);
       const categoryOk =
         selectedCategories.size === 0 || selectedCategories.has(event.categoryId);
       return staffOk && categoryOk;
@@ -253,11 +280,16 @@ export function CalendarApp({
   /* --- 保存・削除 --- */
 
   const save = useCallback(
-    async (draft: EventDraft) => {
+    async (draft: EventDraft, force = false) => {
       setSaving(true);
       try {
         if (panel?.kind === "edit") {
-          const updated = await updateEvent(panel.event.id, draft);
+          // 開いた時点より後にほかの人が変えていたら、黙って上書きしない
+          const updated = await updateEvent(
+            panel.event.id,
+            draft,
+            force ? undefined : panel.event.updatedAt,
+          );
           applyLocal((current) => upsertEvent(current, updated));
           notify("予定を更新しました。");
         } else {
@@ -267,12 +299,29 @@ export function CalendarApp({
         }
         setPanel(null);
       } catch (cause) {
-        notifyError(cause);
+        if (isConflict(cause) && panel?.kind === "edit") {
+          void reload();
+          setConfirmRequest({
+            title: "ほかの人が先に変更しています",
+            body: `「${panel.event.title}」は、この画面を開いたあとに別の人が変更しました。あなたの内容で上書きしますか？（やめると、入力した内容は破棄して最新の状態を表示します）`,
+            confirmLabel: "上書きする",
+            onConfirm: () => {
+              setConfirmRequest(null);
+              void save(draft, true);
+            },
+            onCancel: () => {
+              setConfirmRequest(null);
+              setPanel(null);
+            },
+          });
+        } else {
+          notifyError(cause);
+        }
       } finally {
         setSaving(false);
       }
     },
-    [panel, applyLocal, notify, notifyError],
+    [panel, applyLocal, notify, notifyError, reload],
   );
 
   /* --- ドラッグでの移動・時間変更 --- */
@@ -286,12 +335,13 @@ export function CalendarApp({
         scope: event.scope,
       };
       try {
-        const updated = await updateEvent(event.id, patch);
+        const updated = await updateEvent(event.id, patch, event.updatedAt);
         applyLocal((current) => upsertEvent(current, updated));
         notifyUndoable(message, () => {
           void (async () => {
             try {
-              const reverted = await updateEvent(event.id, before);
+              // 動かしたあとにほかの人が変えていたら、戻さずに知らせる
+              const reverted = await updateEvent(event.id, before, updated.updatedAt);
               applyLocal((current) => upsertEvent(current, reverted));
               notify("元に戻しました。");
             } catch (cause) {
@@ -352,14 +402,15 @@ export function CalendarApp({
       // 入力中の取り消しはブラウザ本来の動きに任せる
       if (target && /^(INPUT|TEXTAREA)$/.test(target.tagName)) return;
 
-      const last = undoStack.current.pop();
-      if (!last) return;
+      const undo = pendingUndo.current;
+      if (!undo) return;
       keyEvent.preventDefault();
-      last();
+      dismissToast();
+      undo();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [dismissToast]);
 
   const remove = useCallback(
     async (event: CalendarEvent) => {
@@ -420,9 +471,7 @@ export function CalendarApp({
         onPrev={() => step(-1)}
         onNext={() => step(1)}
         onToday={() => setAnchor(startOfDay(nowJst()))}
-        onOpenAdmin={() => {
-          window.location.href = "/settings";
-        }}
+        onOpenAdmin={() => router.push("/settings")}
         onSwitchUser={() => {
           window.location.href = "/login/switch";
         }}
@@ -464,6 +513,19 @@ export function CalendarApp({
           </div>
         ) : null}
 
+        {ownGoogleFailed ? (
+          <div
+            role="status"
+            className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-4 py-2.5 text-sm"
+            style={{ background: "var(--surface-3)", color: "var(--ink-muted)" }}
+          >
+            <span>あなたの Google カレンダーを読み込めませんでした。</span>
+            <Link href="/settings" className="font-semibold" style={{ color: "var(--brand)" }}>
+              設定を確認する
+            </Link>
+          </div>
+        ) : null}
+
         {view === "month" ? (
           <MonthView
             anchor={anchor}
@@ -472,7 +534,15 @@ export function CalendarApp({
             staff={staff}
             categories={categories}
             onOpenEvent={openEvent}
-            onCreateAt={(day) => openCreate(day)}
+            onCreateAt={(day) => {
+              // スマホでは日付を押したらまずその日を見せる（追加は右下の＋から）
+              if (isNarrowScreen()) {
+                setAnchor(day);
+                changeView("day");
+              } else {
+                openCreate(day);
+              }
+            }}
             onOpenDay={(day) => {
               setAnchor(day);
               changeView("day");
@@ -555,7 +625,7 @@ export function CalendarApp({
         <GoogleEventPreview event={googlePreview} onClose={() => setGooglePreview(null)} />
       ) : null}
 
-      <Toast message={toast} onDismiss={() => setToast(null)} />
+      <Toast message={toast} onDismiss={dismissToast} />
     </div>
   );
 }

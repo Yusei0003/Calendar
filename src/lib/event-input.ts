@@ -8,13 +8,14 @@ import {
   requireString,
 } from "@/lib/api";
 import { getStore } from "@/lib/db";
-import type { EventInput, EventScope } from "@/lib/types";
+import type { EventInput, EventScope, Staff } from "@/lib/types";
 
 /**
  * 画面から送られてきた予定の内容を検証して、保存できる形に整える。
- * 登録と更新の両方から使う。
+ * 登録と更新の両方から使う。スタッフ一覧を取得済みなら staff に渡すと、
+ * もう一度データベースに問い合わせずに済む。
  */
-export async function parseEventBody(body: unknown): Promise<EventInput> {
+export async function parseEventBody(body: unknown, staff?: Staff[]): Promise<EventInput> {
   if (typeof body !== "object" || body === null) {
     throw new InvalidInput("送信された内容を読み取れませんでした。");
   }
@@ -35,8 +36,8 @@ export async function parseEventBody(body: unknown): Promise<EventInput> {
   const store = getStore();
 
   if (staffId) {
-    const staff = await store.listStaff(true);
-    if (!staff.some((member) => member.id === staffId)) {
+    const members = staff ?? (await store.listStaff(true));
+    if (!members.some((member) => member.id === staffId)) {
       throw new InvalidInput("選ばれたスタッフが見つかりません。");
     }
   }

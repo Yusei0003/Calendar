@@ -13,11 +13,17 @@ export function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
 }
 
+export interface ActorContext {
+  actor: Staff;
+  /** 退職者も含めたスタッフ全員。確認のついでに取れるので、使い回して問い合わせを減らす。 */
+  staff: Staff[];
+}
+
 /**
- * ログイン済みかを確かめ、名乗っているスタッフを返す。
- * すべての API はこれを最初に呼ぶ。
+ * ログイン済みかを確かめ、名乗っているスタッフとスタッフ一覧を返す。
+ * スタッフ一覧も必要な API はこちらを使う。
  */
-export async function requireActor(): Promise<Staff | NextResponse> {
+export async function requireActorContext(): Promise<ActorContext | NextResponse> {
   if (!(await isSignedIn())) return jsonError("ログインが必要です。", 401);
 
   const actorId = await getActorId();
@@ -27,7 +33,16 @@ export async function requireActor(): Promise<Staff | NextResponse> {
   const actor = staff.find((member) => member.id === actorId);
   if (!actor) return jsonError("名前が選ばれていません。", 401);
 
-  return actor;
+  return { actor, staff };
+}
+
+/**
+ * ログイン済みかを確かめ、名乗っているスタッフを返す。
+ * すべての API はこれ（または requireActorContext）を最初に呼ぶ。
+ */
+export async function requireActor(): Promise<Staff | NextResponse> {
+  const context = await requireActorContext();
+  return isResponse(context) ? context : context.actor;
 }
 
 export function isResponse(value: unknown): value is NextResponse {

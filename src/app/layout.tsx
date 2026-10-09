@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
 
+// 数字（日付・時刻）用の書体。端末に入っていなくても同じ見た目になるよう同梱する。
+// 日本語の文字は含まないので、漢字・かなは端末の書体のまま表示される。
+import "@fontsource-variable/inter";
 import "./globals.css";
 
 export const metadata: Metadata = {

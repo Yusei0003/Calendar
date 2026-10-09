@@ -85,12 +85,18 @@ export function EventChip({
         compact ? "px-1.5 py-[3px] text-[11px]" : "px-2 py-1 text-xs"
       } ${isGoogle ? "opacity-90" : ""}`}
     >
+      {/* スマホの月表示は幅が狭いので、アイコンと時刻は省いて件名を見せる */}
       {isGoogle ? (
-        <GoogleSourceIcon className="h-3 w-3 shrink-0 opacity-80" />
+        <GoogleSourceIcon className={`h-3 w-3 shrink-0 opacity-80 ${compact ? "hidden sm:block" : ""}`} />
       ) : category ? (
-        <CategoryIcon icon={category.icon} className="h-3 w-3 shrink-0 opacity-80" />
+        <CategoryIcon
+          icon={category.icon}
+          className={`h-3 w-3 shrink-0 opacity-80 ${compact ? "hidden sm:block" : ""}`}
+        />
       ) : null}
-      <span className="tabular shrink-0 font-semibold opacity-80">{time}</span>
+      <span className={`tabular shrink-0 font-semibold opacity-80 ${compact ? "hidden sm:inline" : ""}`}>
+        {time}
+      </span>
       <span className="truncate font-medium">{event.title}</span>
       {staffName && !compact ? (
         <span className="ml-auto shrink-0 truncate text-[10px] opacity-70">{staffName}</span>

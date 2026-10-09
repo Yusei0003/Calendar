@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchEvents } from "@/lib/client/api";
+import { fetchEvents, fetchGoogleEvents } from "@/lib/client/api";
 import type { CalendarEvent } from "@/lib/types";
 
 /** 自動で取り直す間隔。5人規模ならこの程度で十分（仕様書 5章）。 */
@@ -13,9 +13,15 @@ const POLL_MS = 30_000;
  *
  * 取得中も前回の内容を表示したままにするので、月を送ったときに
  * 画面が一瞬空になることがない。
+ *
+ * Google カレンダーから取り込む予定は別に取りに行き、届いたら重ねる。
+ * Google の応答が遅くても、アプリの予定の表示は待たされない。
  */
 export function useEvents(from: string, to: string) {
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [appEvents, setAppEvents] = useState<CalendarEvent[]>([]);
+  const [googleEvents, setGoogleEvents] = useState<CalendarEvent[]>([]);
+  /** 自分の Google カレンダー連携が読み込めなかった（URLが無効になった等）。 */
+  const [ownGoogleFailed, setOwnGoogleFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,14 +35,29 @@ export function useEvents(from: string, to: string) {
     lastLocalChange.current = Date.now();
   }, []);
 
+  const reloadGoogle = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        const body = await fetchGoogleEvents(from, to, signal);
+        if (signal?.aborted) return;
+        setGoogleEvents(body.events);
+        setOwnGoogleFailed(body.ownLinkFailed);
+      } catch {
+        // Google 側の不調でアプリの予定表示を邪魔しない。前回の内容を残す。
+      }
+    },
+    [from, to],
+  );
+
   const reload = useCallback(
     async (signal?: AbortSignal) => {
+      void reloadGoogle(signal);
       const startedAt = Date.now();
       try {
         const fetched = await fetchEvents(from, to, signal);
         if (signal?.aborted) return;
         if (startedAt < lastLocalChange.current) return;
-        setEvents(fetched);
+        setAppEvents(fetched);
         setError(null);
       } catch (cause) {
         if (signal?.aborted || (cause as Error)?.name === "AbortError") return;
@@ -45,7 +66,7 @@ export function useEvents(from: string, to: string) {
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [from, to],
+    [from, to, reloadGoogle],
   );
 
   // 表示期間が変わったら取り直す
@@ -79,12 +100,20 @@ export function useEvents(from: string, to: string) {
   const applyLocal = useCallback(
     (update: (current: CalendarEvent[]) => CalendarEvent[]) => {
       markLocalChange();
-      setEvents(update);
+      setAppEvents(update);
     },
     [markLocalChange],
   );
 
-  return { events, loading, error, reload, applyLocal, markLocalChange };
+  const events = useMemo(
+    () =>
+      googleEvents.length === 0
+        ? appEvents
+        : [...appEvents, ...googleEvents].sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
+    [appEvents, googleEvents],
+  );
+
+  return { events, loading, error, ownGoogleFailed, reload, applyLocal, markLocalChange };
 }
 
 export function upsertEvent(list: CalendarEvent[], event: CalendarEvent): CalendarEvent[] {
